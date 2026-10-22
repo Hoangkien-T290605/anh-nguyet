@@ -1,184 +1,1239 @@
-.counter {
-  font-size: 16px;
-  padding: 5px 10px;
-  border-radius: 5px;
-  color: var(--accent);
-  background: var(--accent-bg);
-  border: 2px solid transparent;
-  transition: border-color 0.3s;
-  margin-bottom: 24px;
 
-  &:hover {
-    border-color: var(--accent-border);
-  }
-  &:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
-  }
+:root {
+  /* Khai báo các biến màu sắc dùng chung cho toàn bộ website */
+  --navy: #061d3f;
+  --navy-light: #0b2b55;
+  --gold: #f2c653;
+  --gold-dark: #ad7416;
+  --cream: #faf6eb;
+  --cream-border: #eee4d0;
+  --text: #10264a;
+  --muted: #637087;
 }
 
+/* Thiết lập cách tính kích thước cho tất cả phần tử */
+* {
+  box-sizing: border-box;
+}
+
+/* Thiết lập hiệu ứng cuộn trang và vị trí dừng khi chuyển đến mục */
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 20px;
+}
+
+/* Thiết lập giao diện cơ bản của trang web */
+body {
+  margin: 0;
+  min-width: 320px;
+  background: #faf8f2;
+  color: var(--text);
+  font-family: Arial, Helvetica, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Đồng bộ phông chữ cho các thành phần nhập liệu */
+body,
+button,
+input,
+textarea,
+select {
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Sử dụng kích thước chữ kế thừa cho nút bấm và ô nhập liệu */
+button,
+input {
+  font-size: inherit;
+}
+
+/* Loại bỏ hiệu ứng nhấp nháy mặc định khi chạm vào thiết bị di động */
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Hiển thị con trỏ dạng bàn tay khi di chuyển đến nút bấm */
+button {
+  cursor: pointer;
+}
+
+/* Thiết lập màu sắc và loại bỏ gạch chân của liên kết */
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* Hiển thị đường viền nổi bật khi điều hướng bằng bàn phím */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 3px;
+}
+
+/* Thiết lập khung chứa toàn bộ nội dung website */
+.site-shell {
+  width: min(1440px, calc(100% - 64px));
+  margin: 0 auto;
+  padding: 16px 0 20px;
+}
+
+/* Phần đầu trang gồm logo, thanh điều hướng, tìm kiếm và giỏ hàng */
+.site-header {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  min-height: 68px;
+  padding: 8px 25px;
+  color: #fff;
+  background: linear-gradient(110deg, #03152f, #06264b);
+  border: 1px solid rgba(242, 198, 83, 0.13);
+  border-radius: 13px;
+}
+
+/* Thiết lập khung chứa logo thương hiệu */
+.brand {
+  display: flex;
+  flex: 0 0 130px;
+  align-items: center;
+}
+
+/* Thiết lập kích thước và cách hiển thị hình ảnh logo */
+.brand img {
+  display: block;
+  width: 115px;
+  height: 60px;
+  object-fit: contain;
+}
+
+/* Sắp xếp các liên kết trên thanh điều hướng */
+.main-nav {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(13px, 1.8vw, 28px);
+}
+
+/* Định dạng từng liên kết trên thanh điều hướng */
+.nav-link {
+  position: relative;
+  padding: 13px 0;
+  color: #f5f5f5;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Đổi màu liên kết khi di chuột hoặc khi mục đang được chọn */
+.nav-link:hover,
+.nav-link.active {
+  color: var(--gold);
+}
+
+/* Tạo đường gạch chân cho mục điều hướng đang được chọn */
+.nav-link.active::after {
+  position: absolute;
+  right: 0;
+  bottom: 4px;
+  left: 0;
+  height: 2px;
+  background: var(--gold);
+  content: "";
+}
+
+/* Thiết lập giao diện thanh tìm kiếm sản phẩm */
+.search-box {
+  display: flex;
+  flex: 0 1 300px;
+  align-items: center;
+  gap: 10px;
+  min-width: 125px;
+  padding: 9px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.17);
+  border-radius: 28px;
+  background: rgba(255, 255, 255, 0.055);
+}
+
+/* Định dạng biểu tượng tìm kiếm */
+.search-box > span {
+  color: #fff;
+  font-size: 22px;
+  line-height: 1;
+}
+
+/* Thiết lập giao diện ô nhập từ khóa tìm kiếm */
+.search-box input {
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  color: #fff;
+  background: transparent;
+  border: 0;
+  outline: 0;
+  font-size: 12px;
+}
+
+/* Thiết lập màu chữ gợi ý bên trong ô tìm kiếm */
+.search-box input::placeholder {
+  color: #d6dfeb;
+}
+
+/* Sắp xếp các nút tài khoản và giỏ hàng */
+.header-action {
+  position: relative;
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 7px;
+  color: #fff;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+/* Thiết lập kích thước và cách hiển thị biểu tượng tài khoản */
+.account-link img {
+  display: block;
+  width: 25px;
+  height: 25px;
+  object-fit: contain;
+}
+
+/* Định dạng biểu tượng giỏ hàng */
+.cart-icon {
+  font-size: 20px;
+}
+
+/* Hiển thị huy hiệu số lượng sản phẩm trong giỏ hàng */
+.cart-link b {
+  position: absolute;
+  top: -8px;
+  left: 11px;
+  display: grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  color: var(--navy);
+  background: var(--gold);
+  border-radius: 50%;
+  font-size: 10px;
+}
+
+/* Ẩn nút mở menu trên giao diện máy tính */
+.menu-toggle {
+  display: none;
+}
+
+/* Phần banner giới thiệu thương hiệu ở đầu trang */
+
+/* Thiết lập khung chứa banner */
 .hero {
   position: relative;
-
-  .base,
-  .framework,
-  .vite {
-    inset-inline: 0;
-    margin: 0 auto;
-  }
-
-  .base {
-    width: 170px;
-    position: relative;
-    z-index: 0;
-  }
-
-  .framework,
-  .vite {
-    position: absolute;
-  }
-
-  .framework {
-    z-index: 1;
-    top: 34px;
-    height: 28px;
-    transform: perspective(2000px) rotateZ(300deg) rotateX(44deg) rotateY(39deg)
-      scale(1.4);
-  }
-
-  .vite {
-    z-index: 0;
-    top: 107px;
-    height: 26px;
-    width: auto;
-    transform: perspective(2000px) rotateZ(300deg) rotateX(40deg) rotateY(39deg)
-      scale(0.8);
-  }
+  margin-top: 14px;
+  overflow: hidden;
+  background: #0b2143;
+  border-radius: 13px;
+  line-height: 0;
 }
 
-#center {
+/* Thiết lập kích thước và cách hiển thị hình ảnh banner */
+.hero-image {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1170 / 250;
+  object-fit: cover;
+  object-position: center;
+}
+
+/* Định dạng nút kêu gọi hành động trên banner */
+.hero-button {
+  position: absolute;
+  left: 10%;
+  bottom: 14%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  min-width: 185px;
+  min-height: 43px;
+  padding: 12px 22px;
+  color: #152440;
+  background: linear-gradient(110deg, #ffdf78, #f5c34c);
+  border: 0;
+  border-radius: 30px;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.12);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+  transition: filter 0.2s, transform 0.2s;
+}
+
+/* Tạo hiệu ứng khi di chuột vào nút trên banner */
+.hero-button:hover {
+  filter: brightness(1.05);
+  transform: translateY(-2px);
+}
+
+/* Định dạng biểu tượng bên trong nút banner */
+.hero-button span {
+  font-size: 18px;
+}
+
+/* Bố cục chung của các khu vực nội dung trên trang */
+.content-section {
+  margin-top: 14px;
+  padding: 17px 22px 16px;
+  background: linear-gradient(115deg, #fbf7ed, #f8f2e5);
+  border: 1px solid var(--cream-border);
+  border-radius: 13px;
+}
+
+/* Căn chỉnh tiêu đề, mô tả và liên kết xem thêm */
+.section-heading {
   display: flex;
-  flex-direction: column;
-  gap: 25px;
-  place-content: center;
-  place-items: center;
-  flex-grow: 1;
-
-  @media (max-width: 1024px) {
-    padding: 32px 20px 24px;
-    gap: 18px;
-  }
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
 }
 
-#next-steps {
+/* Sắp xếp biểu tượng trang trí và nội dung tiêu đề */
+.heading-title {
   display: flex;
-  border-top: 1px solid var(--border);
-  text-align: left;
-
-  & > div {
-    flex: 1 1 0;
-    padding: 32px;
-    @media (max-width: 1024px) {
-      padding: 24px 20px;
-    }
-  }
-
-  .icon {
-    margin-bottom: 16px;
-    width: 22px;
-    height: 22px;
-  }
-
-  @media (max-width: 1024px) {
-    flex-direction: column;
-    text-align: center;
-  }
+  align-items: center;
+  gap: 13px;
+  min-width: 0;
 }
 
-#docs {
-  border-right: 1px solid var(--border);
-
-  @media (max-width: 1024px) {
-    border-right: none;
-    border-bottom: 1px solid var(--border);
-  }
+/* Thiết lập kích thước hình ảnh trang trí tiêu đề */
+.heading-decoration {
+  display: block;
+  flex: 0 0 36px;
+  width: 36px;
+  height: 43px;
+  object-fit: contain;
 }
 
-#next-steps ul {
-  list-style: none;
-  padding: 0;
-  display: flex;
+/* Định dạng tiêu đề chính của từng khu vực */
+.section-heading h2 {
+  margin: 0 0 4px;
+  color: #10264a;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+/* Định dạng phần mô tả bên dưới tiêu đề */
+.section-heading p {
+  margin: 0;
+  color: #34445b;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* Thiết lập giao diện liên kết xem thêm */
+.text-link {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
   gap: 8px;
-  margin: 32px 0 0;
+  padding: 6px 0;
+  color: #10213b;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
 
-  .logo {
-    height: 18px;
+/* Hiển thị đường viền bên dưới khi di chuột vào liên kết */
+.text-link:hover {
+  border-bottom-color: var(--gold-dark);
+}
+
+/* Thiết lập kích thước biểu tượng trong liên kết xem thêm */
+.text-link span {
+  font-size: 17px;
+}
+
+/* Phần hiển thị các danh mục sản phẩm */
+
+/* Sắp xếp các danh mục theo dạng lưới gồm sáu cột */
+.category-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 15px;
+}
+
+/* Thiết lập giao diện cho từng thẻ danh mục */
+.category-card {
+  display: flex;
+  min-width: 0;
+  min-height: 118px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  padding: 10px 5px;
+  color: var(--navy);
+  background: rgba(255, 255, 255, 0.43);
+  border: 1px solid #eee2cd;
+  border-radius: 12px;
+  transition: background 0.2s, border-color 0.2s,
+    transform 0.2s;
+}
+
+/* Tạo hiệu ứng nâng nhẹ thẻ danh mục khi di chuột */
+.category-card:hover {
+  transform: translateY(-2px);
+}
+
+/* Đổi màu nền và đường viền khi danh mục được chọn */
+.category-card:hover,
+.category-card.selected {
+  background: #fffaf0;
+  border-color: #d6ae56;
+}
+
+/* Thiết lập kích thước biểu tượng của danh mục */
+.category-icon {
+  display: block;
+  width: 49px;
+  height: 49px;
+  object-fit: contain;
+}
+
+/* Định dạng tên danh mục sản phẩm */
+.category-name {
+  color: #0b1d3b;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.4;
+  text-align: center;
+}
+
+/* Phần hiển thị các sản phẩm nổi bật */
+
+/* Điều chỉnh khoảng cách phía dưới khu vực sản phẩm */
+.products-section {
+  padding-bottom: 17px;
+}
+
+/* Sắp xếp các thẻ sản phẩm theo dạng lưới gồm năm cột */
+.product-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 14px;
+}
+
+/* Thiết lập giao diện thẻ thông tin sản phẩm */
+.product-card {
+  min-width: 0;
+  overflow: hidden;
+  background: #fffdf8;
+  border: 1px solid #e8dfce;
+  border-radius: 12px;
+  transition: box-shadow 0.2s, transform 0.2s;
+}
+
+/* Tạo hiệu ứng bóng và nâng thẻ sản phẩm khi di chuột */
+.product-card:hover {
+  box-shadow: 0 7px 18px rgba(22, 35, 55, 0.09);
+  transform: translateY(-2px);
+}
+
+/* Thiết lập khung hình ảnh minh họa sản phẩm */
+.product-image {
+  position: relative;
+  display: flex;
+  min-height: 150px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 9px 9px 0;
+  overflow: hidden;
+  color: #f7d77e;
+  background:
+    radial-gradient(
+      ellipse at 50% 100%,
+      rgba(216, 161, 61, 0.48),
+      transparent 55%
+    ),
+    linear-gradient(135deg, #27442a, #92713b 52%, #172c24);
+  border-radius: 7px;
+}
+
+/* Tạo màu nền minh họa riêng cho sản phẩm thứ nhất */
+.product-image-1 {
+  background:
+    radial-gradient(
+      ellipse at 50% 100%,
+      rgba(240, 198, 102, 0.6),
+      transparent 52%
+    ),
+    linear-gradient(135deg, #8a5428, #d9b26c 53%, #40311e);
+}
+
+/* Tạo màu nền minh họa riêng cho sản phẩm thứ hai */
+.product-image-2 {
+  background:
+    radial-gradient(
+      ellipse at 50% 100%,
+      rgba(238, 201, 123, 0.5),
+      transparent 52%
+    ),
+    linear-gradient(135deg, #3b4b20, #b28b3f 54%, #283820);
+}
+
+/* Tạo màu nền minh họa riêng cho sản phẩm thứ ba */
+.product-image-3 {
+  background:
+    radial-gradient(
+      ellipse at 50% 100%,
+      rgba(255, 219, 151, 0.6),
+      transparent 52%
+    ),
+    linear-gradient(135deg, #5e482b, #c1a16b 52%, #314027);
+}
+
+/* Tạo màu nền minh họa riêng cho sản phẩm thứ tư */
+.product-image-4 {
+  background:
+    radial-gradient(
+      ellipse at 50% 100%,
+      rgba(230, 175, 66, 0.4),
+      transparent 52%
+    ),
+    linear-gradient(135deg, #071b3b, #3b3154 56%, #8b5c2c);
+}
+
+/* Định dạng biểu tượng thay thế hình ảnh sản phẩm */
+.product-placeholder {
+  color: #ffedb6;
+  font-size: 45px;
+  line-height: 1;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+/* Hiển thị tên thương hiệu trên hình minh họa sản phẩm */
+.product-brand {
+  color: #fff2cc;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 2px;
+}
+
+/* Thiết lập nút đánh dấu sản phẩm yêu thích */
+.favorite-button {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  padding: 0;
+  color: #fff;
+  background: rgba(9, 22, 35, 0.35);
+  border: 0;
+  border-radius: 50%;
+  font-size: 23px;
+  line-height: 1;
+}
+
+/* Đổi màu biểu tượng khi sản phẩm đã được yêu thích */
+.favorite-button.is-favorite {
+  color: #ffce66;
+}
+
+/* Thiết lập khoảng cách cho phần thông tin sản phẩm */
+.product-info {
+  padding: 11px 11px 12px;
+}
+
+/* Định dạng tên sản phẩm */
+.product-info h3 {
+  min-height: 19px;
+  margin: 0 0 4px;
+  overflow-wrap: anywhere;
+  color: #10213c;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+/* Định dạng phần mô tả ngắn của sản phẩm */
+.product-detail {
+  margin: 0 0 5px;
+  color: #526077;
+  font-size: 12px;
+}
+
+/* Làm nổi bật giá bán của sản phẩm */
+.product-price {
+  display: block;
+  margin-bottom: 5px;
+  color: #c42d21;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+/* Sắp xếp điểm đánh giá và số lượt đánh giá */
+.product-rating {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+/* Định dạng các biểu tượng ngôi sao đánh giá */
+.product-rating span {
+  color: #e9a900;
+  font-size: 14px;
+  letter-spacing: -1px;
+}
+
+/* Định dạng số lượt đánh giá sản phẩm */
+.product-rating small {
+  color: #43516a;
+  font-size: 11px;
+}
+
+/* Thiết lập giao diện nút thêm sản phẩm vào giỏ hàng */
+.add-button {
+  display: flex;
+  width: 100%;
+  min-height: 36px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 8px 6px;
+  color: #fff;
+  background: #062753;
+  border: 1px solid #062753;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 600;
+  transition: background 0.2s;
+}
+
+/* Đổi màu nền nút khi di chuột */
+.add-button:hover {
+  background: #104174;
+}
+
+/* Định dạng biểu tượng bên trong nút thêm giỏ hàng */
+.add-button span {
+  font-size: 14px;
+}
+
+/* Hiển thị thông báo khi không có sản phẩm phù hợp */
+.empty-message {
+  padding: 30px 10px;
+  color: var(--muted);
+  text-align: center;
+}
+
+/* Phần thông báo sau khi thêm sản phẩm vào giỏ hàng */
+.toast-message {
+  position: fixed;
+  right: 22px;
+  bottom: 22px;
+  z-index: 100;
+  max-width: calc(100vw - 32px);
+  padding: 14px 20px;
+  color: #fff;
+  background: #062753;
+  border: 1px solid rgba(242, 198, 83, 0.5);
+  border-radius: 10px;
+  box-shadow: 0 5px 20px rgba(0, 0, 0, 0.18);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* Phần chân trang chứa thông tin thương hiệu và liên hệ */
+.site-footer {
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr 1.2fr 1.45fr 1.3fr;
+  align-items: start;
+  gap: 24px;
+  margin-top: 13px;
+  padding: 23px 25px 18px;
+  color: #f7f4ed;
+  background: linear-gradient(110deg, #03152f, #06274c);
+  border-radius: 12px;
+}
+
+/* Sắp xếp logo và thông tin thương hiệu ở chân trang */
+.footer-brand {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+/* Căn giữa khu vực chứa logo chân trang */
+.footer-logo {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  margin: 0 0 5px;
+  padding-left: 10px;
+}
+
+/* Thiết lập kích thước hình ảnh logo chân trang */
+.footer-brand img {
+  display: block;
+  width: 150px;
+  height: 90px;
+  object-fit: contain;
+}
+
+/* Định dạng tên thương hiệu ở chân trang */
+.footer-brand h2 {
+  margin: 0 0 5px;
+  color: #fff;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+/* Định dạng slogan và mô tả thương hiệu */
+.footer-brand p {
+  margin: 0 0 12px;
+  color: #f5d88d;
+  font-size: 12px;
+  font-style: italic;
+  line-height: 1.5;
+}
+
+/* Hiển thị thông tin bổ sung ở cuối phần thương hiệu */
+.footer-brand small {
+  margin-top: auto;
+  color: #d2dbea;
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+/* Sắp xếp nội dung trong từng cột chân trang */
+.footer-column {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 9px;
+}
+
+/* Định dạng tiêu đề của từng cột thông tin */
+.footer-column h3 {
+  margin: 2px 0 5px;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+/* Định dạng liên kết và đoạn văn trong các cột */
+.footer-column a,
+.footer-column p {
+  margin: 0;
+  color: #e1e7ef;
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+/* Đổi màu liên kết khi di chuột */
+.footer-column a:hover {
+  color: var(--gold);
+}
+
+/* Sắp xếp biểu tượng và nội dung thông tin liên hệ */
+.contact-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+}
+
+/* Thiết lập kích thước biểu tượng hình ảnh liên hệ */
+.contact-item img {
+  flex: 0 0 20px;
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+}
+
+/* Định dạng biểu tượng liên hệ bằng ký tự */
+.contact-symbol {
+  flex: 0 0 20px;
+  width: 20px;
+  color: var(--gold);
+  font-size: 17px;
+  line-height: 1.3;
+  text-align: center;
+}
+
+/* Sắp xếp các liên kết mạng xã hội */
+.social-links {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 5px;
+}
+
+/* Định dạng liên kết mạng xã hội */
+.social-links a {
+  color: #fff;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+/* Tạo khoảng cách cho phần mô tả đăng ký nhận tin */
+.footer-newsletter p {
+  margin-bottom: 5px;
+}
+
+/* Thiết lập khung biểu mẫu đăng ký nhận tin */
+.newsletter-form {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid #e6d8b9;
+  border-radius: 7px;
+}
+
+/* Định dạng ô nhập email đăng ký nhận tin */
+.newsletter-form input {
+  width: 100%;
+  min-width: 0;
+  padding: 10px 9px;
+  color: #172943;
+  background: #fff;
+  border: 0;
+  outline: 0;
+  font-size: 12px;
+}
+
+/* Thiết lập nút gửi thông tin đăng ký nhận tin */
+.newsletter-form button {
+  display: grid;
+  flex: 0 0 36px;
+  place-items: center;
+  color: #10213b;
+  background: #f3c64f;
+  border: 0;
+  font-size: 17px;
+}
+
+/* Điều chỉnh bố cục khi hiển thị trên máy tính bảng */
+@media (max-width: 1150px) {
+  .site-shell {
+    width: calc(100% - 36px);
   }
 
-  a {
-    color: var(--text-h);
-    font-size: 16px;
-    border-radius: 6px;
-    background: var(--social-bg);
-    display: flex;
-    padding: 6px 12px;
-    align-items: center;
-    gap: 8px;
-    text-decoration: none;
-    transition: box-shadow 0.3s;
-
-    &:hover {
-      box-shadow: var(--shadow);
-    }
-    .button-icon {
-      height: 18px;
-      width: 18px;
-    }
+  .site-header {
+    gap: 14px;
+    padding-inline: 18px;
   }
 
-  @media (max-width: 1024px) {
-    margin-top: 20px;
-    flex-wrap: wrap;
-    justify-content: center;
+  .brand {
+    flex-basis: 90px;
+  }
 
-    li {
-      flex: 1 1 calc(50% - 8px);
-    }
+  .brand img {
+    width: 85px;
+  }
 
-    a {
-      width: 100%;
-      justify-content: center;
-      box-sizing: border-box;
-    }
+  .main-nav {
+    gap: 12px;
+  }
+
+  .nav-link {
+    font-size: 12px;
+  }
+
+  .search-box {
+    flex-basis: 165px;
+  }
+
+  .header-action {
+    font-size: 11px;
+  }
+
+  .category-grid {
+    gap: 10px;
+  }
+
+  .site-footer {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
-#spacer {
-  height: 88px;
-  border-top: 1px solid var(--border);
-  @media (max-width: 1024px) {
+/* Điều chỉnh bố cục cho điện thoại và màn hình nhỏ */
+@media (max-width: 760px) {
+  .site-shell {
+    width: calc(100% - 20px);
+    padding-top: 9px;
+  }
+
+  .site-header {
+    min-height: 63px;
+    gap: 10px;
+    padding: 6px 11px;
+    border-radius: 10px;
+  }
+
+  .brand {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .brand img {
+    width: 82px;
     height: 48px;
   }
+
+  /* Hiển thị nút mở menu trên điện thoại */
+  .menu-toggle {
+    display: block;
+    order: 3;
+    padding: 3px;
+    color: #fff;
+    background: transparent;
+    border: 0;
+    font-size: 24px;
+  }
+
+  /* Thiết lập menu điều hướng dạng dọc trên điện thoại */
+  .main-nav {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    left: 0;
+    display: none;
+    align-items: stretch;
+    flex-direction: column;
+    gap: 0;
+    padding: 8px 14px;
+    background: #061d3f;
+    border: 1px solid rgba(242, 198, 83, 0.2);
+    border-radius: 10px;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.18);
+  }
+
+  /* Hiển thị menu khi trạng thái mở được kích hoạt */
+  .main-nav.is-open {
+    display: flex;
+  }
+
+  /* Điều chỉnh khoảng cách và kích thước liên kết trên điện thoại */
+  .nav-link {
+    padding: 12px 4px;
+    font-size: 13px;
+  }
+
+  /* Điều chỉnh đường gạch chân của mục đang được chọn */
+  .nav-link.active::after {
+    right: auto;
+    width: 65px;
+  }
+
+  /* Điều chỉnh kích thước thanh tìm kiếm trên điện thoại */
+  .search-box {
+    order: 2;
+    flex: 0 1 44%;
+    min-width: 0;
+    gap: 6px;
+    padding: 8px;
+  }
+
+  /* Thu nhỏ biểu tượng tìm kiếm trên điện thoại */
+  .search-box > span {
+    font-size: 19px;
+  }
+
+  /* Điều chỉnh cỡ chữ trong ô tìm kiếm trên điện thoại */
+  .search-box input {
+    font-size: 11px;
+  }
+
+  /* Ẩn liên kết tài khoản để tiết kiệm diện tích màn hình */
+  .account-link {
+    display: none;
+  }
+
+  /* Sắp xếp vị trí biểu tượng giỏ hàng trên điện thoại */
+  .cart-link {
+    order: 4;
+  }
+
+  /* Ẩn chữ giỏ hàng, chỉ giữ lại biểu tượng */
+  .cart-link > span:not(.cart-icon) {
+    display: none;
+  }
+
+  /* Thu gọn khoảng cách phía trên banner */
+  .hero {
+    margin-top: 10px;
+    border-radius: 9px;
+  }
+
+  /* Điều chỉnh cách hiển thị hình banner trên điện thoại */
+  .hero-image {
+    aspect-ratio: 1170 / 250;
+    object-fit: cover;
+  }
+
+  /* Thu nhỏ nút hành động trên banner */
+  .hero-button {
+    left: 10%;
+    bottom: 12%;
+    min-width: 0;
+    min-height: 0;
+    gap: 7px;
+    padding: 7px 11px;
+    font-size: clamp(8px, 2vw, 11px);
+  }
+
+  /* Thu nhỏ biểu tượng trong nút banner */
+  .hero-button span {
+    font-size: 13px;
+  }
+
+  /* Thu gọn khoảng cách và phần đệm của khu vực nội dung */
+  .content-section {
+    margin-top: 10px;
+    padding: 12px 10px;
+    border-radius: 10px;
+  }
+
+  /* Điều chỉnh bố cục tiêu đề khu vực trên điện thoại */
+  .section-heading {
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+
+  /* Thu gọn khoảng cách giữa biểu tượng và tiêu đề */
+  .heading-title {
+    gap: 7px;
+  }
+
+  /* Thu nhỏ hình trang trí tiêu đề */
+  .heading-decoration {
+    flex-basis: 25px;
+    width: 25px;
+    height: 32px;
+  }
+
+  /* Điều chỉnh kích thước tiêu đề khu vực */
+  .section-heading h2 {
+    font-size: 17px;
+  }
+
+  /* Thu nhỏ phần mô tả khu vực */
+  .section-heading p {
+    font-size: 11px;
+  }
+
+  /* Thu nhỏ liên kết xem thêm trên điện thoại */
+  .text-link {
+    gap: 3px;
+    font-size: 10px;
+  }
+
+  /* Hiển thị danh mục thành ba cột trên điện thoại */
+  .category-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 7px;
+  }
+
+  /* Thu nhỏ thẻ danh mục để phù hợp với màn hình */
+  .category-card {
+    min-height: 91px;
+    gap: 5px;
+    padding: 8px 3px;
+    border-radius: 8px;
+  }
+
+  /* Thu nhỏ biểu tượng danh mục trên điện thoại */
+  .category-icon {
+    width: 39px;
+    height: 39px;
+  }
+
+  /* Thu nhỏ tên danh mục trên điện thoại */
+  .category-name {
+    font-size: 11px;
+  }
+
+  /* Hiển thị sản phẩm thành hai cột trên điện thoại */
+  .product-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 9px;
+  }
+
+  /* Thu nhỏ khung hình ảnh sản phẩm trên điện thoại */
+  .product-image {
+    min-height: 110px;
+    margin: 6px 6px 0;
+  }
+
+  /* Thu nhỏ biểu tượng minh họa sản phẩm */
+  .product-placeholder {
+    font-size: 37px;
+  }
+
+  /* Thu gọn phần đệm của thông tin sản phẩm */
+  .product-info {
+    padding: 8px;
+  }
+
+  /* Điều chỉnh kích thước tên sản phẩm */
+  .product-info h3 {
+    font-size: 12px;
+  }
+
+  /* Thu nhỏ mô tả sản phẩm */
+  .product-detail {
+    font-size: 11px;
+  }
+
+  /* Thu nhỏ giá bán sản phẩm */
+  .product-price {
+    font-size: 13px;
+  }
+
+  /* Thu nhỏ biểu tượng sao đánh giá */
+  .product-rating span {
+    font-size: 12px;
+  }
+
+  /* Thu nhỏ số lượt đánh giá */
+  .product-rating small {
+    font-size: 10px;
+  }
+
+  /* Thu nhỏ nút thêm giỏ hàng */
+  .add-button {
+    min-height: 32px;
+    font-size: 10px;
+  }
+
+  /* Chuyển chân trang thành hai cột trên điện thoại */
+  .site-footer {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 22px 15px;
+    margin-top: 10px;
+    padding: 18px 14px;
+    border-radius: 10px;
+  }
+
+  /* Cho phần thương hiệu chiếm toàn bộ chiều ngang chân trang */
+  .footer-brand {
+    grid-column: 1 / -1;
+    align-items: center;
+    text-align: center;
+  }
+
+  /* Điều chỉnh vị trí logo chân trang trên điện thoại */
+  .footer-logo {
+    padding-left: 8px;
+  }
+
+  /* Thu nhỏ logo chân trang trên điện thoại */
+  .footer-brand img {
+    width: 145px;
+    height: 82px;
+  }
+
+  /* Điều chỉnh kích thước tên thương hiệu chân trang */
+  .footer-brand h2 {
+    font-size: 17px;
+  }
+
+  /* Thu nhỏ slogan thương hiệu */
+  .footer-brand p {
+    font-size: 11px;
+  }
+
+  /* Thu nhỏ thông tin phụ và nội dung trong các cột */
+  .footer-brand small,
+  .footer-column a,
+  .footer-column p {
+    font-size: 11px;
+  }
+
+  /* Thu nhỏ tiêu đề các cột chân trang */
+  .footer-column h3 {
+    font-size: 12px;
+  }
+
+  /* Thu gọn ô nhập email đăng ký nhận tin */
+  .newsletter-form input {
+    padding: 9px 6px;
+    font-size: 10px;
+  }
 }
 
-.ticks {
-  position: relative;
-  width: 100%;
-
-  &::before,
-  &::after {
-    content: '';
-    position: absolute;
-    top: -4.5px;
-    border: 5px solid transparent;
+/* Tối ưu giao diện cho điện thoại có chiều rộng tối đa 380px */
+@media (max-width: 380px) {
+  /* Thu hẹp lề ngoài trên màn hình rất nhỏ */
+  .site-shell {
+    width: calc(100% - 14px);
   }
 
-  &::before {
-    left: 0;
-    border-left-color: var(--border);
+  /* Thu gọn khoảng cách trong phần đầu trang */
+  .site-header {
+    gap: 6px;
+    padding-inline: 7px;
   }
-  &::after {
-    right: 0;
-    border-right-color: var(--border);
+
+  /* Thu nhỏ logo để tiết kiệm không gian */
+  .brand img {
+    width: 70px;
+  }
+
+  /* Điều chỉnh chiều rộng thanh tìm kiếm */
+  .search-box {
+    flex-basis: 43%;
+  }
+
+  /* Thu gọn phần đệm của nút banner */
+  .hero-button {
+    padding: 5px 8px;
+  }
+
+  /* Thu nhỏ tiêu đề khu vực */
+  .section-heading h2 {
+    font-size: 15px;
+  }
+
+  /* Thu nhỏ liên kết xem thêm */
+  .text-link {
+    font-size: 9px;
+  }
+
+  /* Thu nhỏ tên danh mục */
+  .category-name {
+    font-size: 10px;
+  }
+
+  /* Thu gọn khoảng cách giữa các thẻ sản phẩm */
+  .product-grid {
+    gap: 7px;
   }
 }
