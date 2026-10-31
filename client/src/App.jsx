@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-// Import hình ảnh và biểu tượng dùng trong giao diện
+// Import hình ảnh và biểu tượng
 import logo from "./assets/logo-anh-nguyet.png";
 import headerPanel from "./assets/header-panel.png";
 import iconTrangTri from "./assets/icon-trang-tri.png";
@@ -20,8 +20,8 @@ const API_URL = "http://localhost:5000/api/products";
 
 // Danh sách danh mục sản phẩm
 const categories = [
-  { name: "Bánh từ gạo", icon: iconBanh },
-  { name: "Bột gạo", icon: iconBotGao },
+  { name: "Bánh", icon: iconBanh },
+  { name: "Gạo, bột", icon: iconBotGao },
   { name: "Đồ uống", icon: iconDoUong },
   { name: "Quà tặng", icon: iconHopQua },
   { name: "Đặc sản", icon: iconDacSan },
@@ -30,8 +30,13 @@ const categories = [
 
 // Biểu tượng minh họa theo danh mục
 function getProductSymbol(category) {
-  if (category === "Bột gạo") return "▤";
-  if (category === "Đồ uống") return "♧";
+  if (category === "Bột gạo" || category === "Gạo, bột" || category === "Gạo") {
+    return "▤";
+  }
+
+  if (category === "Đồ uống") {
+    return "♧";
+  }
 
   if (
     category === "Quà tặng" ||
@@ -48,6 +53,22 @@ function getProductSymbol(category) {
 function matchesCategory(productCategory, activeCategory) {
   if (activeCategory === "Tất cả") {
     return true;
+  }
+
+  // Hỗ trợ cả tên danh mục cũ và mới
+  if (activeCategory === "Bánh") {
+    return (
+      productCategory === "Bánh" ||
+      productCategory === "Bánh từ gạo"
+    );
+  }
+
+  if (activeCategory === "Gạo, bột") {
+    return (
+      productCategory === "Gạo, bột" ||
+      productCategory === "Gạo" ||
+      productCategory === "Bột gạo"
+    );
   }
 
   if (activeCategory === "Quà tặng") {
@@ -90,7 +111,7 @@ function App() {
   const [favorites, setFavorites] = useState([]);
   const [notice, setNotice] = useState("");
 
-// Lấy danh sách sản phẩm từ MySQL thông qua backend
+  // Lấy danh sách sản phẩm từ MySQL thông qua backend
   useEffect(() => {
     const controller = new AbortController();
 
@@ -194,12 +215,14 @@ function App() {
     );
   }
 
+  // Đóng menu trên điện thoại
   function closeMenu() {
     setMenuOpen(false);
   }
 
   return (
     <div className="site-shell">
+      {/* HEADER */}
       <header className="site-header">
         <a
           className="brand"
@@ -286,6 +309,7 @@ function App() {
           </a>
         </nav>
 
+        {/* TÌM KIẾM */}
         <label className="search-box">
           <span aria-hidden="true">⌕</span>
 
@@ -298,6 +322,7 @@ function App() {
           />
         </label>
 
+        {/* TÀI KHOẢN */}
         <a
           className="header-action account-link"
           href="#"
@@ -307,6 +332,7 @@ function App() {
           <span>Tài khoản</span>
         </a>
 
+        {/* GIỎ HÀNG */}
         <a
           className="header-action cart-link"
           href="#"
@@ -322,6 +348,7 @@ function App() {
       </header>
 
       <main id="trang-chu">
+        {/* BANNER */}
         <section className="hero" aria-label="Banner Ánh Nguyệt">
           <img
             className="hero-image"
@@ -335,6 +362,7 @@ function App() {
           </a>
         </section>
 
+        {/* DANH MỤC SẢN PHẨM */}
         <section className="content-section" id="danh-muc">
           <div className="section-heading">
             <div className="heading-title">
@@ -369,7 +397,12 @@ function App() {
                 }`}
                 key={category.name}
                 type="button"
-                onClick={() => setActiveCategory(category.name)}
+                onClick={() => {
+                  setActiveCategory(category.name);
+                  document
+                    .getElementById("san-pham")
+                    ?.scrollIntoView({ behavior: "smooth" });
+                }}
                 aria-pressed={activeCategory === category.name}
               >
                 <img
@@ -389,6 +422,7 @@ function App() {
           </div>
         </section>
 
+        {/* SẢN PHẨM NỔI BẬT */}
         <section
           className="content-section products-section"
           id="san-pham"
@@ -520,12 +554,14 @@ function App() {
         </section>
       </main>
 
+      {/* THÔNG BÁO */}
       {notice && (
         <div className="toast-message" role="status">
           {notice}
         </div>
       )}
 
+      {/* FOOTER */}
       <footer className="site-footer" id="footer">
         <div className="footer-brand">
           <a
