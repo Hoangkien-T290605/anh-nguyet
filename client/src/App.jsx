@@ -90,7 +90,7 @@ function App() {
   const [favorites, setFavorites] = useState([]);
   const [notice, setNotice] = useState("");
 
-  // Lấy danh sách sản phẩm từ MongoDB thông qua backend
+// Lấy danh sách sản phẩm từ MySQL thông qua backend
   useEffect(() => {
     const controller = new AbortController();
 
