@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from "react";
 
 // Import hình ảnh và biểu tượng
@@ -6,7 +7,7 @@ import headerPanel from "./assets/header-panel.png";
 import iconTrangTri from "./assets/icon-trang-tri.png";
 import iconBanh from "./assets/icon-banh.png";
 import iconBotGao from "./assets/icon-bot-gao.png";
-import iconDacSan from "./assets/icon-dac-san.png";
+import iconMyPham from "./assets/icon-my-pham.png";
 import iconDoUong from "./assets/icon-do-uong.png";
 import iconHopQua from "./assets/icon-hop-qua.png";
 import iconTatCa from "./assets/icon-tat-ca.png";
@@ -24,7 +25,7 @@ const categories = [
   { name: "Gạo, bột", icon: iconBotGao },
   { name: "Đồ uống", icon: iconDoUong },
   { name: "Quà tặng", icon: iconHopQua },
-  { name: "Đặc sản", icon: iconDacSan },
+  { name: "Mỹ phẩm", icon: iconMyPham },
   { name: "Tất cả", icon: iconTatCa },
 ];
 
@@ -38,11 +39,11 @@ function getProductSymbol(category) {
     return "♧";
   }
 
-  if (
-    category === "Quà tặng" ||
-    category === "Đặc sản" ||
-    category === "Đặc sản và quà tặng"
-  ) {
+  if (category === "Mỹ phẩm") {
+    return "✿";
+  }
+
+  if (category === "Quà tặng" || category === "Đặc sản và quà tặng") {
     return "✳";
   }
 
@@ -55,7 +56,6 @@ function matchesCategory(productCategory, activeCategory) {
     return true;
   }
 
-  // Hỗ trợ cả tên danh mục cũ và mới
   if (activeCategory === "Bánh") {
     return (
       productCategory === "Bánh" ||
@@ -78,10 +78,10 @@ function matchesCategory(productCategory, activeCategory) {
     );
   }
 
-  if (activeCategory === "Đặc sản") {
+  if (activeCategory === "Mỹ phẩm") {
     return (
-      productCategory === "Đặc sản" ||
-      productCategory === "Đặc sản và quà tặng"
+      productCategory === "Mỹ phẩm" ||
+      productCategory === "Đặc sản"
     );
   }
 
@@ -181,7 +181,6 @@ function App() {
   });
 
   // Thêm sản phẩm vào giỏ hàng
-  // Nếu sản phẩm đã tồn tại thì tăng số lượng lên 1
   function addToCart(product) {
     setCart((current) => {
       const existingProduct = current.find(
@@ -656,27 +655,15 @@ function App() {
           </p>
 
           <div className="social-links" aria-label="Mạng xã hội">
-            <a
-              href="#"
-              onClick={preventPageScroll}
-              aria-label="Facebook"
-            >
+            <a href="#" onClick={preventPageScroll} aria-label="Facebook">
               f
             </a>
 
-            <a
-              href="#"
-              onClick={preventPageScroll}
-              aria-label="Instagram"
-            >
+            <a href="#" onClick={preventPageScroll} aria-label="Instagram">
               ◎
             </a>
 
-            <a
-              href="#"
-              onClick={preventPageScroll}
-              aria-label="TikTok"
-            >
+            <a href="#" onClick={preventPageScroll} aria-label="TikTok">
               ♪
             </a>
           </div>
