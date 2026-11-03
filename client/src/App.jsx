@@ -1,7 +1,11 @@
 
 import { useEffect, useState } from "react";
+import { Routes, Route, useNavigate } from "react-router-dom";
 
-// Import hình ảnh và biểu tượng
+import ProductsPage from "./ProductsPage";
+import Header from "./components/Header";
+import Footer from "./components/Footer";
+
 import logo from "./assets/logo-anh-nguyet.png";
 import headerPanel from "./assets/header-panel.png";
 import iconTrangTri from "./assets/icon-trang-tri.png";
@@ -12,14 +16,11 @@ import iconDoUong from "./assets/icon-do-uong.png";
 import iconHopQua from "./assets/icon-hop-qua.png";
 import iconTatCa from "./assets/icon-tat-ca.png";
 import iconPhone from "./assets/icon-phone.png";
-import iconTaiKhoan from "./assets/icon-tai-khoan.png";
 
 import "./App.css";
 
-// API backend Ánh Nguyệt
 const API_URL = "http://localhost:5000/api/products";
 
-// Danh sách danh mục sản phẩm đồng bộ với MySQL
 const categories = [
   { name: "Bánh", icon: iconBanh },
   { name: "Gạo, bột", icon: iconBotGao },
@@ -29,60 +30,34 @@ const categories = [
   { name: "Tất cả", icon: iconTatCa },
 ];
 
-// Biểu tượng minh họa theo danh mục
 function getProductSymbol(category) {
-  if (category === "Gạo, bột") {
-    return "▤";
-  }
-
-  if (category === "Đồ uống") {
-    return "♧";
-  }
-
-  if (category === "Mỹ phẩm") {
-    return "✿";
-  }
-
-  if (category === "Sản phẩm khác") {
-    return "✳";
-  }
-
+  if (category === "Gạo, bột") return "▤";
+  if (category === "Đồ uống") return "♧";
+  if (category === "Mỹ phẩm") return "✿";
+  if (category === "Sản phẩm khác") return "✳";
   return "❋";
 }
 
-// Kiểm tra sản phẩm có thuộc danh mục đang chọn không
 function matchesCategory(productCategory, activeCategory) {
-  if (activeCategory === "Tất cả") {
-    return true;
-  }
-
+  if (activeCategory === "Tất cả") return true;
   return productCategory === activeCategory;
 }
 
-// Định dạng giá tiền Việt Nam
 const formatPrice = (price) =>
   `${Number(price || 0).toLocaleString("vi-VN")}đ`;
 
-// Ngăn liên kết # làm trang tự cuộn
-function preventPageScroll(event) {
-  event.preventDefault();
-}
+// TRANG CHỦ
+function HomePage({ search, setSearch, setCart }) {
+  const navigate = useNavigate();
 
-function App() {
-  // Dữ liệu sản phẩm lấy từ backend
   const [products, setProducts] = useState([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
   const [productError, setProductError] = useState("");
 
-  // Trạng thái giao diện
-  const [search, setSearch] = useState("");
-  const [cart, setCart] = useState([]);
   const [activeCategory, setActiveCategory] = useState("Tất cả");
-  const [menuOpen, setMenuOpen] = useState(false);
   const [favorites, setFavorites] = useState([]);
   const [notice, setNotice] = useState("");
 
-  // Lấy danh sách sản phẩm từ MySQL thông qua backend
   useEffect(() => {
     const controller = new AbortController();
 
@@ -105,9 +80,7 @@ function App() {
 
         setProducts(Array.isArray(result.data) ? result.data : []);
       } catch (error) {
-        if (error.name === "AbortError") {
-          return;
-        }
+        if (error.name === "AbortError") return;
 
         console.error("Lỗi lấy sản phẩm:", error);
 
@@ -126,41 +99,29 @@ function App() {
     return () => controller.abort();
   }, []);
 
-  // Tổng số lượng sản phẩm trong giỏ hàng
-  const cartCount = cart.reduce(
-    (total, item) => total + item.quantity,
-    0
-  );
-
-  // Lọc sản phẩm theo tên và danh mục
   const filteredProducts = products.filter((product) => {
     const productName = (product.name || "").toLocaleLowerCase("vi");
     const searchText = search.toLocaleLowerCase("vi");
 
-    const matchesSearch = productName.includes(searchText);
-
-    const matchesSelectedCategory = matchesCategory(
-      product.category,
-      activeCategory
-    );
-
     return (
-      matchesSearch &&
-      matchesSelectedCategory &&
-      product.active !== false
+      productName.includes(searchText) &&
+      matchesCategory(product.category, activeCategory) &&
+      product.active !== false &&
+      product.active !== 0
     );
   });
 
-  // Thêm sản phẩm vào giỏ hàng
   function addToCart(product) {
     setCart((current) => {
+      const productId = product._id ?? product.id;
+
       const existingProduct = current.find(
-        (item) => item._id === product._id
+        (item) => (item._id ?? item.id) === productId
       );
 
       if (existingProduct) {
         return current.map((item) =>
-          item._id === product._id
+          (item._id ?? item.id) === productId
             ? { ...item, quantity: item.quantity + 1 }
             : item
         );
@@ -171,12 +132,9 @@ function App() {
 
     setNotice(`Đã thêm "${product.name}" vào giỏ hàng.`);
 
-    window.setTimeout(() => {
-      setNotice("");
-    }, 2500);
+    window.setTimeout(() => setNotice(""), 2500);
   }
 
-  // Thêm hoặc bỏ yêu thích
   function toggleFavorite(id) {
     setFavorites((current) =>
       current.includes(id)
@@ -185,140 +143,9 @@ function App() {
     );
   }
 
-  // Đóng menu trên điện thoại
-  function closeMenu() {
-    setMenuOpen(false);
-  }
-
   return (
-    <div className="site-shell">
-      {/* HEADER */}
-      <header className="site-header">
-        <a
-          className="brand"
-          href="#"
-          aria-label="Ánh Nguyệt - Trang chủ"
-          onClick={(event) => {
-            preventPageScroll(event);
-            closeMenu();
-          }}
-        >
-          <img src={logo} alt="Logo Ánh Nguyệt" />
-        </a>
-
-        <button
-          className="menu-toggle"
-          type="button"
-          onClick={() => setMenuOpen((open) => !open)}
-          aria-label="Mở hoặc đóng menu"
-          aria-expanded={menuOpen}
-        >
-          ☰
-        </button>
-
-        <nav className={`main-nav ${menuOpen ? "is-open" : ""}`}>
-          <a
-            className="nav-link active"
-            href="#"
-            onClick={(event) => {
-              preventPageScroll(event);
-              closeMenu();
-            }}
-          >
-            Trang chủ
-          </a>
-
-          <a
-            className="nav-link"
-            href="#san-pham"
-            onClick={(event) => {
-              event.preventDefault();
-              document
-                .getElementById("san-pham")
-                ?.scrollIntoView({ behavior: "smooth" });
-              closeMenu();
-            }}
-          >
-            Sản phẩm
-          </a>
-
-          <a
-            className="nav-link"
-            href="#"
-            onClick={(event) => {
-              preventPageScroll(event);
-              closeMenu();
-            }}
-          >
-            Giới thiệu
-          </a>
-
-          <a
-            className="nav-link"
-            href="#"
-            onClick={(event) => {
-              preventPageScroll(event);
-              closeMenu();
-            }}
-          >
-            Tin tức
-          </a>
-
-          <a
-            className="nav-link"
-            href="#footer"
-            onClick={(event) => {
-              event.preventDefault();
-              document
-                .getElementById("footer")
-                ?.scrollIntoView({ behavior: "smooth" });
-              closeMenu();
-            }}
-          >
-            Liên hệ
-          </a>
-        </nav>
-
-        {/* TÌM KIẾM */}
-        <label className="search-box">
-          <span aria-hidden="true">⌕</span>
-
-          <input
-            type="search"
-            placeholder="Tìm kiếm sản phẩm..."
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            aria-label="Tìm kiếm sản phẩm"
-          />
-        </label>
-
-        {/* TÀI KHOẢN */}
-        <a
-          className="header-action account-link"
-          href="#"
-          onClick={preventPageScroll}
-        >
-          <img src={iconTaiKhoan} alt="" />
-          <span>Tài khoản</span>
-        </a>
-
-        {/* GIỎ HÀNG */}
-        <a
-          className="header-action cart-link"
-          href="#"
-          onClick={preventPageScroll}
-        >
-          <span className="cart-icon" aria-hidden="true">
-            🛒
-          </span>
-
-          <span>Giỏ hàng</span>
-          <b>{cartCount}</b>
-        </a>
-      </header>
-
+    <div className="home-page">
       <main id="trang-chu">
-        {/* BANNER */}
         <section className="hero" aria-label="Banner Ánh Nguyệt">
           <img
             className="hero-image"
@@ -332,7 +159,6 @@ function App() {
           </a>
         </section>
 
-        {/* DANH MỤC SẢN PHẨM */}
         <section className="content-section" id="danh-muc">
           <div className="section-heading">
             <div className="heading-title">
@@ -353,7 +179,7 @@ function App() {
             <button
               className="text-link"
               type="button"
-              onClick={() => setActiveCategory("Tất cả")}
+              onClick={() => navigate("/san-pham")}
             >
               Xem tất cả danh mục <span>→</span>
             </button>
@@ -369,6 +195,7 @@ function App() {
                 type="button"
                 onClick={() => {
                   setActiveCategory(category.name);
+
                   document
                     .getElementById("san-pham")
                     ?.scrollIntoView({ behavior: "smooth" });
@@ -392,7 +219,6 @@ function App() {
           </div>
         </section>
 
-        {/* SẢN PHẨM NỔI BẬT */}
         <section
           className="content-section products-section"
           id="san-pham"
@@ -442,97 +268,100 @@ function App() {
                 loadingProducts || productError ? "none" : undefined,
             }}
           >
-            {filteredProducts.map((product, index) => (
-              <article className="product-card" key={product._id}>
-                <div
-                  className={`product-image product-image-${index % 5}`}
-                >
-                  {/* HÌNH ẢNH SẢN PHẨM */}
-                  <img
-                    className="product-photo"
-                    src={
-                      product.image
-                        ? `/images/products/${product.image}`
-                        : undefined
-                    }
-                    alt={product.name}
-                    loading="lazy"
-                    style={{
-                      display: product.image ? "block" : "none",
-                    }}
-                    onError={(event) => {
-                      event.currentTarget.style.display = "none";
+            {filteredProducts.map((product, index) => {
+              const productId = product._id ?? product.id;
+              const isFavorite = favorites.includes(productId);
 
-                      const placeholder =
-                        event.currentTarget.parentElement.querySelector(
-                          ".product-placeholder"
-                        );
-
-                      if (placeholder) {
-                        placeholder.style.display = "flex";
+              return (
+                <article className="product-card" key={productId}>
+                  <div
+                    className={`product-image product-image-${index % 5}`}
+                  >
+                    <img
+                      className="product-photo"
+                      src={
+                        product.image
+                          ? `/images/products/${product.image}`
+                          : undefined
                       }
-                    }}
-                  />
+                      alt={product.name}
+                      loading="lazy"
+                      style={{
+                        display: product.image ? "block" : "none",
+                      }}
+                      onError={(event) => {
+                        event.currentTarget.style.display = "none";
 
-                  <span
-                    className="product-placeholder"
-                    aria-hidden="true"
-                    style={{
-                      display: product.image ? "none" : "flex",
-                    }}
-                  >
-                    {getProductSymbol(product.category)}
-                  </span>
+                        const placeholder =
+                          event.currentTarget.parentElement.querySelector(
+                            ".product-placeholder"
+                          );
 
-                  <span className="product-brand">ÁNH NGUYỆT</span>
+                        if (placeholder) {
+                          placeholder.style.display = "flex";
+                        }
+                      }}
+                    />
 
-                  <button
-                    className={`favorite-button ${
-                      favorites.includes(product._id)
-                        ? "is-favorite"
-                        : ""
-                    }`}
-                    type="button"
-                    onClick={() => toggleFavorite(product._id)}
-                    aria-label={
-                      favorites.includes(product._id)
-                        ? "Bỏ yêu thích"
-                        : "Thêm vào yêu thích"
-                    }
-                  >
-                    {favorites.includes(product._id) ? "♥" : "♡"}
-                  </button>
-                </div>
+                    <span
+                      className="product-placeholder"
+                      aria-hidden="true"
+                      style={{
+                        display: product.image ? "none" : "flex",
+                      }}
+                    >
+                      {getProductSymbol(product.category)}
+                    </span>
 
-                <div className="product-info">
-                  <h3>{product.name}</h3>
+                    <span className="product-brand">ÁNH NGUYỆT</span>
 
-                  <p className="product-detail">
-                    {product.description || product.category}
-                  </p>
-
-                  <strong className="product-price">
-                    {formatPrice(product.price)}
-                  </strong>
-
-                  <div className="product-rating">
-                    <span>{product.category}</span>
+                    <button
+                      className={`favorite-button ${
+                        isFavorite ? "is-favorite" : ""
+                      }`}
+                      type="button"
+                      onClick={() => toggleFavorite(productId)}
+                      aria-label={
+                        isFavorite
+                          ? "Bỏ yêu thích"
+                          : "Thêm vào yêu thích"
+                      }
+                    >
+                      {isFavorite ? "♥" : "♡"}
+                    </button>
                   </div>
 
-                  <button
-                    className="add-button"
-                    type="button"
-                    onClick={() => addToCart(product)}
-                    disabled={product.stock <= 0}
-                  >
-                    <span aria-hidden="true">🛒</span>
-                    {product.stock <= 0
-                      ? "Tạm hết hàng"
-                      : "Thêm vào giỏ hàng"}
-                  </button>
-                </div>
-              </article>
-            ))}
+                  <div className="product-info">
+                    <h3>{product.name}</h3>
+
+                    <p className="product-detail">
+                      {product.description || product.category}
+                    </p>
+
+                    <strong className="product-price">
+                      {formatPrice(product.price)}
+                    </strong>
+
+                    <div className="product-rating">
+                      <span>{product.category}</span>
+                    </div>
+
+                    <button
+                      className="add-button"
+                      type="button"
+                      onClick={() => addToCart(product)}
+                      disabled={Number(product.stock) <= 0}
+                    >
+                      <span aria-hidden="true">🛒</span>
+
+                      {Number(product.stock) <= 0
+                        ? "Tạm hết hàng"
+                        : "Thêm vào giỏ hàng"}
+                    </button>
+                  </div>
+                </article>
+              );
+            })}
           </div>
 
           {!loadingProducts &&
@@ -545,152 +374,58 @@ function App() {
         </section>
       </main>
 
-      {/* THÔNG BÁO */}
       {notice && (
         <div className="toast-message" role="status">
           {notice}
         </div>
       )}
 
-      {/* FOOTER */}
-      <footer className="site-footer" id="footer">
-        <div className="footer-brand">
-          <a
-            className="footer-logo"
-            href="#"
-            aria-label="Về đầu trang"
-            onClick={preventPageScroll}
-          >
-            <img src={logo} alt="Logo Ánh Nguyệt" />
-          </a>
+      <Footer />
+    </div>
+  );
+}
 
-          <p>Tinh hoa từ đất - Sáng bừng vị ngon</p>
+// APP
+function App() {
+  const [search, setSearch] = useState("");
+  const [cart, setCart] = useState([]);
 
-          <small>
-            © 2026 Ánh Nguyệt. Mọi quyền được bảo lưu.
-          </small>
-        </div>
+  const cartCount = cart.reduce(
+    (total, item) => total + Number(item.quantity || 0),
+    0
+  );
 
-        <div className="footer-column">
-          <h3>Thông tin</h3>
+  return (
+    <div className="site-shell">
+      <Header
+        cartCount={cartCount}
+        search={search}
+        onSearchChange={setSearch}
+      />
 
-          <a href="#" onClick={preventPageScroll}>
-            Giới thiệu
-          </a>
-
-          <a
-            href="#san-pham"
-            onClick={(event) => {
-              event.preventDefault();
-              document
-                .getElementById("san-pham")
-                ?.scrollIntoView({ behavior: "smooth" });
-            }}
-          >
-            Sản phẩm
-          </a>
-
-          <a href="#" onClick={preventPageScroll}>
-            Tin tức
-          </a>
-
-          <a href="#footer">Liên hệ</a>
-        </div>
-
-        <div className="footer-column">
-          <h3>Hỗ trợ khách hàng</h3>
-
-          <a href="#" onClick={preventPageScroll}>
-            Chính sách vận chuyển
-          </a>
-
-          <a href="#" onClick={preventPageScroll}>
-            Chính sách đổi trả
-          </a>
-
-          <a href="#" onClick={preventPageScroll}>
-            Phương thức thanh toán
-          </a>
-
-          <a href="#" onClick={preventPageScroll}>
-            Điều khoản sử dụng
-          </a>
-        </div>
-
-        <div className="footer-column contact-column">
-          <h3>Liên hệ</h3>
-
-          <p className="contact-item">
-            <img src={iconPhone} alt="" />
-            <a href="tel:0387536592">0387536592</a>
-          </p>
-
-          <a
-            className="contact-item"
-            href="mailto:anhnguyet.moonlightrice@gmail.com"
-          >
-            <span className="contact-symbol" aria-hidden="true">
-              ✉
-            </span>
-
-            <span>anhnguyet.moonlightrice@gmail.com</span>
-          </a>
-
-          <p className="contact-item">
-            <span className="contact-symbol" aria-hidden="true">
-              ⌖
-            </span>
-
-            <span>
-              149D, Nguyễn Văn Trường, Ninh Kiều, Cần Thơ
-            </span>
-          </p>
-
-          <div className="social-links" aria-label="Mạng xã hội">
-            <a href="#" onClick={preventPageScroll} aria-label="Facebook">
-              f
-            </a>
-
-            <a href="#" onClick={preventPageScroll} aria-label="Instagram">
-              ◎
-            </a>
-
-            <a href="#" onClick={preventPageScroll} aria-label="TikTok">
-              ♪
-            </a>
-          </div>
-        </div>
-
-        <div className="footer-column footer-newsletter">
-          <h3>Đăng ký nhận tin</h3>
-
-          <p>
-            Nhận thông tin sản phẩm mới và ưu đãi đặc biệt.
-          </p>
-
-          <form
-            className="newsletter-form"
-            onSubmit={(event) => {
-              event.preventDefault();
-
-              window.alert(
-                "Chức năng đăng ký nhận tin sẽ được hoàn thiện sau."
-              );
-            }}
-          >
-            <input
-              type="email"
-              placeholder="Nhập email của bạn"
-              aria-label="Email nhận tin"
-              required
+      <Routes>
+        <Route
+          path="/"
+          element={
+            <HomePage
+              search={search}
+              setSearch={setSearch}
+              setCart={setCart}
             />
+          }
+        />
 
-            <button type="submit" aria-label="Đăng ký">
-              ➤
-            </button>
-          </form>
-        </div>
-      </footer>
+        <Route
+          path="/san-pham"
+          element={
+            <ProductsPage
+              search={search}
+              setSearch={setSearch}
+              setCart={setCart}
+            />
+          }
+        />
+      </Routes>
     </div>
   );
 }
