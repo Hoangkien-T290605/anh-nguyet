@@ -18,17 +18,15 @@
   padding: 12px max(32px, calc((100% - 1440px) / 2));
 
   color: var(--text);
-  background: rgba(255, 255, 255, 0.96);
+  background: var(--surface);
   border: 0;
   border-bottom: 1px solid var(--border);
   border-radius: 0;
-  box-shadow: 0 3px 18px rgba(30, 50, 38, 0.035);
+  box-shadow: 0 3px 18px rgba(70, 45, 95, 0.08);
   backdrop-filter: blur(14px);
 }
 
-/* ========================================
-   LOGO
-======================================== */
+/* LOGO */
 
 .brand {
   display: flex;
@@ -42,9 +40,7 @@
   object-fit: contain;
 }
 
-/* ========================================
-   MENU ĐIỀU HƯỚNG
-======================================== */
+/* MENU ĐIỀU HƯỚNG */
 
 .main-nav {
   display: flex;
@@ -58,7 +54,7 @@
   position: relative;
   padding: 12px 0;
 
-  color: #505b53;
+  color: var(--muted);
   font-size: 13px;
   font-weight: 600;
   white-space: nowrap;
@@ -85,9 +81,7 @@
   content: "";
 }
 
-/* ========================================
-   THANH TÌM KIẾM
-======================================== */
+/* THANH TÌM KIẾM */
 
 .search-box {
   display: flex;
@@ -98,18 +92,20 @@
   min-width: 120px;
   padding: 11px 15px;
 
-  background: #f5f6f2;
-  border: 1px solid #eceee8;
+  background: var(--primary-light);
+  border: 1px solid var(--border);
   border-radius: 30px;
 
   transition:
     border-color 0.2s,
-    background 0.2s;
+    background 0.2s,
+    box-shadow 0.2s;
 }
 
 .search-box:focus-within {
-  background: #fff;
+  background: var(--surface);
   border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(112, 65, 166, 0.12);
 }
 
 .search-box > span {
@@ -132,12 +128,10 @@
 }
 
 .search-box input::placeholder {
-  color: #9ba39c;
+  color: var(--muted);
 }
 
-/* ========================================
-   TÀI KHOẢN CHƯA ĐĂNG NHẬP
-======================================== */
+/* TÀI KHOẢN CHƯA ĐĂNG NHẬP */
 
 .account-guest {
   display: flex;
@@ -161,12 +155,10 @@
 }
 
 .account-separator {
-  color: #b8beb8;
+  color: var(--border);
 }
 
-/* ========================================
-   TÀI KHOẢN ĐÃ ĐĂNG NHẬP
-======================================== */
+/* TÀI KHOẢN ĐÃ ĐĂNG NHẬP */
 
 .header-action {
   position: relative;
@@ -218,9 +210,7 @@
   text-overflow: ellipsis;
 }
 
-/* ========================================
-   GIỎ HÀNG
-======================================== */
+/* GIỎ HÀNG */
 
 .cart-icon {
   font-size: 21px;
@@ -243,17 +233,13 @@
   font-size: 10px;
 }
 
-/* ========================================
-   MENU ĐIỆN THOẠI
-======================================== */
+/* MENU ĐIỆN THOẠI */
 
 .menu-toggle {
   display: none;
 }
 
-/* ========================================
-   LAPTOP VÀ TABLET NGANG
-======================================== */
+/* LAPTOP VÀ TABLET NGANG */
 
 @media (max-width: 1150px) {
   .site-header {
@@ -291,9 +277,7 @@
   }
 }
 
-/* ========================================
-   TABLET
-======================================== */
+/* TABLET */
 
 @media (min-width: 761px) and (max-width: 950px) {
   .site-header {
@@ -318,9 +302,7 @@
   }
 }
 
-/* ========================================
-   ĐIỆN THOẠI
-======================================== */
+/* ĐIỆN THOẠI */
 
 @media (max-width: 760px) {
   .site-header {
@@ -366,9 +348,9 @@
 
     padding: 8px 17px 13px;
 
-    background: #fff;
+    background: var(--surface);
     border-bottom: 1px solid var(--border);
-    box-shadow: 0 12px 22px rgba(0, 0, 0, 0.09);
+    box-shadow: 0 12px 22px rgba(70, 45, 95, 0.12);
   }
 
   .main-nav.is-open {
@@ -432,9 +414,7 @@
   }
 }
 
-/* ========================================
-   ĐIỆN THOẠI RẤT NHỎ
-======================================== */
+/* ĐIỆN THOẠI RẤT NHỎ */
 
 @media (max-width: 380px) {
   .site-header {

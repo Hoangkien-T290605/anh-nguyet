@@ -1,3 +1,4 @@
+
 /* ========================================
    TRANG SẢN PHẨM ÁNH NGUYỆT
 ======================================== */
@@ -35,7 +36,7 @@
 }
 
 .products-breadcrumb span:nth-child(2) {
-  color: #b7bdb7;
+  color: #b9a9c9;
 }
 
 /* ========================================
@@ -48,9 +49,10 @@
   gap: 17px;
   margin-bottom: 34px;
   padding: 25px 28px;
-  background: linear-gradient(110deg, #f0f3ed, #fbf8ef);
-  border: 1px solid #e8eade;
+  background: linear-gradient(110deg, #f0e9f8, #fffcff);
+  border: 1px solid var(--border);
   border-left: 4px solid var(--accent);
+  border-radius: 10px;
 }
 
 .products-title-decoration {
@@ -70,7 +72,7 @@
 
 .products-eyebrow {
   margin: 0 0 7px;
-  color: #b17b32;
+  color: var(--accent);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 2px;
@@ -113,10 +115,10 @@
   top: 105px;
   min-width: 0;
   padding: 22px 19px;
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 10px;
-  box-shadow: 0 5px 20px rgba(32, 55, 42, 0.045);
+  box-shadow: 0 5px 20px rgba(70, 45, 95, 0.06);
 }
 
 .sidebar-heading {
@@ -154,8 +156,8 @@
   justify-content: space-between;
   gap: 10px;
   padding: 12px 11px;
-  color: #536158;
-  background: #f7f8f4;
+  color: var(--text);
+  background: #f7f3fb;
   border: 1px solid transparent;
   border-radius: 7px;
   font-size: 12px;
@@ -168,7 +170,7 @@
 .sidebar-all.selected {
   color: var(--primary-dark);
   background: var(--primary-light);
-  border-color: #d4e1d4;
+  border-color: var(--border);
 }
 
 .sidebar-arrow {
@@ -183,7 +185,7 @@
 
 .sidebar-category {
   padding: 3px 0;
-  border-bottom: 1px solid #f0f1ec;
+  border-bottom: 1px solid #f0eaf5;
 }
 
 .sidebar-category:last-child {
@@ -201,7 +203,7 @@
   flex: 1;
   min-width: 0;
   padding: 11px 5px;
-  color: #3d4b42;
+  color: var(--text);
   background: transparent;
   border: 0;
   font-size: 12px;
@@ -212,7 +214,7 @@
 
 .sidebar-category-name:hover,
 .sidebar-category-name.selected {
-  color: #b17b32;
+  color: var(--primary);
 }
 
 .sidebar-expand {
@@ -222,8 +224,8 @@
   height: 27px;
   place-items: center;
   color: var(--primary);
-  background: #f4f6f1;
-  border: 1px solid #e8ece5;
+  background: #f5f0fa;
+  border: 1px solid var(--border);
   border-radius: 6px;
   font-size: 17px;
   line-height: 1;
@@ -249,8 +251,8 @@
   align-items: center;
   gap: 9px;
   width: 100%;
-  padding: 8px 8px;
-  color: #788179;
+  padding: 8px;
+  color: var(--muted);
   background: transparent;
   border: 0;
   border-radius: 5px;
@@ -262,14 +264,14 @@
 .sidebar-subcategory:hover,
 .sidebar-subcategory.selected {
   color: var(--primary-dark);
-  background: #f1f5ef;
+  background: #f3edf9;
 }
 
 .subcategory-dot {
   flex: 0 0 5px;
   width: 5px;
   height: 5px;
-  background: #c5cfc4;
+  background: #c9b8d9;
   border-radius: 50%;
 }
 
@@ -301,7 +303,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  color: #667168;
+  color: var(--muted);
   cursor: pointer;
   font-size: 11px;
   line-height: 1.4;
@@ -327,8 +329,8 @@
   width: 16px;
   height: 16px;
   place-items: center;
-  background: #fff;
-  border: 1px solid #cbd3c9;
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 50%;
 }
 
@@ -344,7 +346,7 @@
 .clear-price {
   margin-top: 14px;
   padding: 0;
-  color: #b17b32;
+  color: var(--primary);
   background: transparent;
   border: 0;
   font-size: 11px;
@@ -364,8 +366,8 @@
   margin-top: 23px;
   padding: 11px 8px;
   color: var(--primary);
-  background: #f4f6f1;
-  border: 1px solid #e2e8df;
+  background: #f5f0fa;
+  border: 1px solid var(--border);
   border-radius: 6px;
   font-size: 11px;
   font-weight: 700;
@@ -395,7 +397,7 @@
   gap: 13px;
   margin-bottom: 21px;
   padding: 17px 18px;
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 9px;
 }
@@ -432,13 +434,13 @@
   gap: 8px;
   min-width: 120px;
   padding: 10px 12px;
-  background: #f7f8f5;
-  border: 1px solid #e8ebe5;
+  background: #f7f3fb;
+  border: 1px solid var(--border);
   border-radius: 6px;
 }
 
 .products-search:focus-within {
-  background: #fff;
+  background: var(--surface);
   border-color: var(--primary);
 }
 
@@ -460,7 +462,7 @@
 }
 
 .products-search input::placeholder {
-  color: #9ba39c;
+  color: var(--muted);
 }
 
 /* SẮP XẾP */
@@ -481,9 +483,9 @@
 .products-sort select {
   max-width: 165px;
   padding: 10px 9px;
-  color: #536158;
-  background: #fff;
-  border: 1px solid #e5e9e1;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 6px;
   outline: 0;
   font-size: 10px;
@@ -523,8 +525,8 @@
   align-items: center;
   justify-content: center;
   padding: 30px 15px;
-  background: #fff;
-  border: 1px dashed #d9dfd6;
+  background: var(--surface);
+  border: 1px dashed var(--border);
   border-radius: 10px;
   text-align: center;
 }
@@ -688,10 +690,6 @@
     position: static;
     width: 100%;
     padding: 16px;
-  }
-
-  .sidebar-heading {
-    margin-bottom: 11px;
   }
 
   .sidebar-category-list {
