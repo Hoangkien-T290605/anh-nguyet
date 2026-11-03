@@ -3,10 +3,10 @@ import { useEffect, useState } from "react";
 import { Routes, Route, useNavigate } from "react-router-dom";
 
 import ProductsPage from "./ProductsPage";
+import CartPage from "./CartPage";
 import Header from "./components/Header";
 import Footer from "./components/Footer";
 
-import logo from "./assets/logo-anh-nguyet.png";
 import headerPanel from "./assets/header-panel.png";
 import iconTrangTri from "./assets/icon-trang-tri.png";
 import iconBanh from "./assets/icon-banh.png";
@@ -15,7 +15,6 @@ import iconMyPham from "./assets/icon-my-pham.png";
 import iconDoUong from "./assets/icon-do-uong.png";
 import iconHopQua from "./assets/icon-hop-qua.png";
 import iconTatCa from "./assets/icon-tat-ca.png";
-import iconPhone from "./assets/icon-phone.png";
 
 import "./App.css";
 
@@ -46,7 +45,6 @@ function matchesCategory(productCategory, activeCategory) {
 const formatPrice = (price) =>
   `${Number(price || 0).toLocaleString("vi-VN")}đ`;
 
-// TRANG CHỦ
 function HomePage({ search, setSearch, setCart }) {
   const navigate = useNavigate();
 
@@ -113,16 +111,16 @@ function HomePage({ search, setSearch, setCart }) {
 
   function addToCart(product) {
     setCart((current) => {
-      const productId = product._id ?? product.id;
+      const productId = String(product._id ?? product.id);
 
       const existingProduct = current.find(
-        (item) => (item._id ?? item.id) === productId
+        (item) => String(item._id ?? item.id) === productId
       );
 
       if (existingProduct) {
         return current.map((item) =>
-          (item._id ?? item.id) === productId
-            ? { ...item, quantity: item.quantity + 1 }
+          String(item._id ?? item.id) === productId
+            ? { ...item, quantity: Number(item.quantity || 0) + 1 }
             : item
         );
       }
@@ -131,7 +129,6 @@ function HomePage({ search, setSearch, setCart }) {
     });
 
     setNotice(`Đã thêm "${product.name}" vào giỏ hàng.`);
-
     window.setTimeout(() => setNotice(""), 2500);
   }
 
@@ -162,17 +159,10 @@ function HomePage({ search, setSearch, setCart }) {
         <section className="content-section" id="danh-muc">
           <div className="section-heading">
             <div className="heading-title">
-              <img
-                className="heading-decoration"
-                src={iconTrangTri}
-                alt=""
-              />
-
+              <img className="heading-decoration" src={iconTrangTri} alt="" />
               <div>
                 <h2>Danh mục sản phẩm</h2>
-                <p>
-                  Khám phá các dòng sản phẩm đa dạng của Ánh Nguyệt
-                </p>
+                <p>Khám phá các dòng sản phẩm đa dạng của Ánh Nguyệt</p>
               </div>
             </div>
 
@@ -195,23 +185,14 @@ function HomePage({ search, setSearch, setCart }) {
                 type="button"
                 onClick={() => {
                   setActiveCategory(category.name);
-
-                  document
-                    .getElementById("san-pham")
-                    ?.scrollIntoView({ behavior: "smooth" });
+                  document.getElementById("san-pham")?.scrollIntoView({
+                    behavior: "smooth",
+                  });
                 }}
                 aria-pressed={activeCategory === category.name}
               >
-                <img
-                  className="category-icon"
-                  src={category.icon}
-                  alt=""
-                />
-
-                <span
-                  className="category-name"
-                  style={{ whiteSpace: "nowrap" }}
-                >
+                <img className="category-icon" src={category.icon} alt="" />
+                <span className="category-name" style={{ whiteSpace: "nowrap" }}>
                   {category.name}
                 </span>
               </button>
@@ -219,23 +200,13 @@ function HomePage({ search, setSearch, setCart }) {
           </div>
         </section>
 
-        <section
-          className="content-section products-section"
-          id="san-pham"
-        >
+        <section className="content-section products-section" id="san-pham">
           <div className="section-heading">
             <div className="heading-title">
-              <img
-                className="heading-decoration"
-                src={iconTrangTri}
-                alt=""
-              />
-
+              <img className="heading-decoration" src={iconTrangTri} alt="" />
               <div>
                 <h2>Sản phẩm nổi bật</h2>
-                <p>
-                  Những sản phẩm được yêu thích nhất hiện nay
-                </p>
+                <p>Những sản phẩm được yêu thích nhất hiện nay</p>
               </div>
             </div>
 
@@ -256,16 +227,13 @@ function HomePage({ search, setSearch, setCart }) {
           )}
 
           {productError && (
-            <p className="empty-message" role="alert">
-              {productError}
-            </p>
+            <p className="empty-message" role="alert">{productError}</p>
           )}
 
           <div
             className="product-grid"
             style={{
-              display:
-                loadingProducts || productError ? "none" : undefined,
+              display: loadingProducts || productError ? "none" : undefined,
             }}
           >
             {filteredProducts.map((product, index) => {
@@ -274,9 +242,7 @@ function HomePage({ search, setSearch, setCart }) {
 
               return (
                 <article className="product-card" key={productId}>
-                  <div
-                    className={`product-image product-image-${index % 5}`}
-                  >
+                  <div className={`product-image product-image-${index % 5}`}>
                     <img
                       className="product-photo"
                       src={
@@ -286,29 +252,21 @@ function HomePage({ search, setSearch, setCart }) {
                       }
                       alt={product.name}
                       loading="lazy"
-                      style={{
-                        display: product.image ? "block" : "none",
-                      }}
+                      style={{ display: product.image ? "block" : "none" }}
                       onError={(event) => {
                         event.currentTarget.style.display = "none";
-
                         const placeholder =
                           event.currentTarget.parentElement.querySelector(
                             ".product-placeholder"
                           );
-
-                        if (placeholder) {
-                          placeholder.style.display = "flex";
-                        }
+                        if (placeholder) placeholder.style.display = "flex";
                       }}
                     />
 
                     <span
                       className="product-placeholder"
                       aria-hidden="true"
-                      style={{
-                        display: product.image ? "none" : "flex",
-                      }}
+                      style={{ display: product.image ? "none" : "flex" }}
                     >
                       {getProductSymbol(product.category)}
                     </span>
@@ -321,11 +279,7 @@ function HomePage({ search, setSearch, setCart }) {
                       }`}
                       type="button"
                       onClick={() => toggleFavorite(productId)}
-                      aria-label={
-                        isFavorite
-                          ? "Bỏ yêu thích"
-                          : "Thêm vào yêu thích"
-                      }
+                      aria-label={isFavorite ? "Bỏ yêu thích" : "Thêm vào yêu thích"}
                     >
                       {isFavorite ? "♥" : "♡"}
                     </button>
@@ -333,19 +287,15 @@ function HomePage({ search, setSearch, setCart }) {
 
                   <div className="product-info">
                     <h3>{product.name}</h3>
-
                     <p className="product-detail">
                       {product.description || product.category}
                     </p>
-
                     <strong className="product-price">
                       {formatPrice(product.price)}
                     </strong>
-
                     <div className="product-rating">
                       <span>{product.category}</span>
                     </div>
-
                     <button
                       className="add-button"
                       type="button"
@@ -353,7 +303,6 @@ function HomePage({ search, setSearch, setCart }) {
                       disabled={Number(product.stock) <= 0}
                     >
                       <span aria-hidden="true">🛒</span>
-
                       {Number(product.stock) <= 0
                         ? "Tạm hết hàng"
                         : "Thêm vào giỏ hàng"}
@@ -364,31 +313,40 @@ function HomePage({ search, setSearch, setCart }) {
             })}
           </div>
 
-          {!loadingProducts &&
-            !productError &&
-            filteredProducts.length === 0 && (
-              <p className="empty-message">
-                Không tìm thấy sản phẩm phù hợp.
-              </p>
-            )}
+          {!loadingProducts && !productError && filteredProducts.length === 0 && (
+            <p className="empty-message">Không tìm thấy sản phẩm phù hợp.</p>
+          )}
         </section>
       </main>
 
-      {notice && (
-        <div className="toast-message" role="status">
-          {notice}
-        </div>
-      )}
+      {notice && <div className="toast-message" role="status">{notice}</div>}
 
       <Footer />
     </div>
   );
 }
 
-// APP
 function App() {
   const [search, setSearch] = useState("");
-  const [cart, setCart] = useState([]);
+
+  const [cart, setCart] = useState(() => {
+    try {
+      const savedCart = localStorage.getItem("anh-nguyet-cart");
+      const parsedCart = savedCart ? JSON.parse(savedCart) : [];
+      return Array.isArray(parsedCart) ? parsedCart : [];
+    } catch (error) {
+      console.error("Không thể đọc giỏ hàng:", error);
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("anh-nguyet-cart", JSON.stringify(cart));
+    } catch (error) {
+      console.error("Không thể lưu giỏ hàng:", error);
+    }
+  }, [cart]);
 
   const cartCount = cart.reduce(
     (total, item) => total + Number(item.quantity || 0),
@@ -424,6 +382,11 @@ function App() {
               setCart={setCart}
             />
           }
+        />
+
+        <Route
+          path="/gio-hang"
+          element={<CartPage cart={cart} setCart={setCart} />}
         />
       </Routes>
     </div>
