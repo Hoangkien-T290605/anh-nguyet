@@ -19,19 +19,19 @@ import "./App.css";
 // API backend Ánh Nguyệt
 const API_URL = "http://localhost:5000/api/products";
 
-// Danh sách danh mục sản phẩm
+// Danh sách danh mục sản phẩm đồng bộ với MySQL
 const categories = [
   { name: "Bánh", icon: iconBanh },
   { name: "Gạo, bột", icon: iconBotGao },
   { name: "Đồ uống", icon: iconDoUong },
-  { name: "Quà tặng", icon: iconHopQua },
   { name: "Mỹ phẩm", icon: iconMyPham },
+  { name: "Sản phẩm khác", icon: iconHopQua },
   { name: "Tất cả", icon: iconTatCa },
 ];
 
 // Biểu tượng minh họa theo danh mục
 function getProductSymbol(category) {
-  if (category === "Bột gạo" || category === "Gạo, bột" || category === "Gạo") {
+  if (category === "Gạo, bột") {
     return "▤";
   }
 
@@ -43,7 +43,7 @@ function getProductSymbol(category) {
     return "✿";
   }
 
-  if (category === "Quà tặng" || category === "Đặc sản và quà tặng") {
+  if (category === "Sản phẩm khác") {
     return "✳";
   }
 
@@ -54,35 +54,6 @@ function getProductSymbol(category) {
 function matchesCategory(productCategory, activeCategory) {
   if (activeCategory === "Tất cả") {
     return true;
-  }
-
-  if (activeCategory === "Bánh") {
-    return (
-      productCategory === "Bánh" ||
-      productCategory === "Bánh từ gạo"
-    );
-  }
-
-  if (activeCategory === "Gạo, bột") {
-    return (
-      productCategory === "Gạo, bột" ||
-      productCategory === "Gạo" ||
-      productCategory === "Bột gạo"
-    );
-  }
-
-  if (activeCategory === "Quà tặng") {
-    return (
-      productCategory === "Quà tặng" ||
-      productCategory === "Đặc sản và quà tặng"
-    );
-  }
-
-  if (activeCategory === "Mỹ phẩm") {
-    return (
-      productCategory === "Mỹ phẩm" ||
-      productCategory === "Đặc sản"
-    );
   }
 
   return productCategory === activeCategory;
@@ -476,21 +447,42 @@ function App() {
                 <div
                   className={`product-image product-image-${index % 5}`}
                 >
-                  {product.image ? (
-                    <img
-                      className="product-photo"
-                      src={product.image}
-                      alt={product.name}
-                      loading="lazy"
-                    />
-                  ) : (
-                    <span
-                      className="product-placeholder"
-                      aria-hidden="true"
-                    >
-                      {getProductSymbol(product.category)}
-                    </span>
-                  )}
+                  {/* HÌNH ẢNH SẢN PHẨM */}
+                  <img
+                    className="product-photo"
+                    src={
+                      product.image
+                        ? `/images/products/${product.image}`
+                        : undefined
+                    }
+                    alt={product.name}
+                    loading="lazy"
+                    style={{
+                      display: product.image ? "block" : "none",
+                    }}
+                    onError={(event) => {
+                      event.currentTarget.style.display = "none";
+
+                      const placeholder =
+                        event.currentTarget.parentElement.querySelector(
+                          ".product-placeholder"
+                        );
+
+                      if (placeholder) {
+                        placeholder.style.display = "flex";
+                      }
+                    }}
+                  />
+
+                  <span
+                    className="product-placeholder"
+                    aria-hidden="true"
+                    style={{
+                      display: product.image ? "none" : "flex",
+                    }}
+                  >
+                    {getProductSymbol(product.category)}
+                  </span>
 
                   <span className="product-brand">ÁNH NGUYỆT</span>
 
