@@ -22,7 +22,7 @@ const pool = mysql.createPool({
   queueLimit: 0,
 });
 
-// Chuẩn hóa dữ liệu để tương thích với giao diện đang dùng product._id
+// Chuẩn hóa dữ liệu sản phẩm
 function formatProduct(row) {
   return {
     ...row,
@@ -34,6 +34,32 @@ function formatProduct(row) {
   };
 }
 
+// Chuẩn hóa dữ liệu đánh giá
+function formatReview(row) {
+  let media = row.media;
+
+  if (typeof media === "string") {
+    try {
+      media = JSON.parse(media);
+    } catch {
+      media = [];
+    }
+  }
+
+  if (!Array.isArray(media)) {
+    media = [];
+  }
+
+  return {
+    ...row,
+    id: Number(row.id),
+    product_id: Number(row.product_id),
+    rating: Number(row.rating),
+    media,
+  };
+}
+
+// Kiểm tra dữ liệu sản phẩm
 function validateProduct(body, partial = false) {
   const errors = [];
 
@@ -60,7 +86,10 @@ function validateProduct(body, partial = false) {
     }
   }
 
-  if (body.description !== undefined && typeof body.description !== "string") {
+  if (
+    body.description !== undefined &&
+    typeof body.description !== "string"
+  ) {
     errors.push("Mô tả phải là chuỗi ký tự");
   }
 
@@ -92,6 +121,7 @@ function validateProduct(body, partial = false) {
   return errors;
 }
 
+// Chuẩn hóa dữ liệu trước khi lưu sản phẩm
 function getProductValues(body) {
   return {
     name: body.name.trim(),
@@ -101,9 +131,10 @@ function getProductValues(body) {
     image: body.image ?? "",
     stock: body.stock === undefined ? 0 : Number(body.stock),
     featured: body.featured === true || body.featured === 1,
-    active: body.active === undefined
-      ? true
-      : body.active === true || body.active === 1,
+    active:
+      body.active === undefined
+        ? true
+        : body.active === true || body.active === 1,
   };
 }
 
@@ -165,6 +196,104 @@ app.get("/api/products", async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Không thể lấy danh sách sản phẩm",
+    });
+  }
+});
+
+// Lấy đánh giá và thống kê đánh giá của một sản phẩm
+app.get("/api/products/:id/reviews", async (req, res) => {
+  try {
+    const productId = Number(req.params.id);
+
+    if (!Number.isSafeInteger(productId) || productId < 1) {
+      return res.status(400).json({
+        success: false,
+        message: "ID sản phẩm không hợp lệ",
+      });
+    }
+
+    // Kiểm tra sản phẩm có tồn tại hay không
+    const [products] = await pool.execute(
+      "SELECT id FROM products WHERE id = ?",
+      [productId]
+    );
+
+    if (!products.length) {
+      return res.status(404).json({
+        success: false,
+        message: "Không tìm thấy sản phẩm",
+      });
+    }
+
+    // Lấy thống kê tổng quan và số lượng theo từng mức sao
+    const [summaryRows] = await pool.execute(
+      `SELECT
+        COUNT(*) AS totalReviews,
+        COALESCE(AVG(rating), 0) AS averageRating,
+        SUM(CASE WHEN rating = 5 THEN 1 ELSE 0 END) AS fiveStars,
+        SUM(CASE WHEN rating = 4 THEN 1 ELSE 0 END) AS fourStars,
+        SUM(CASE WHEN rating = 3 THEN 1 ELSE 0 END) AS threeStars,
+        SUM(CASE WHEN rating = 2 THEN 1 ELSE 0 END) AS twoStars,
+        SUM(CASE WHEN rating = 1 THEN 1 ELSE 0 END) AS oneStar,
+        SUM(
+          CASE
+            WHEN media IS NOT NULL AND JSON_LENGTH(media) > 0 THEN 1
+            ELSE 0
+          END
+        ) AS mediaCount
+       FROM product_reviews
+       WHERE product_id = ?`,
+      [productId]
+    );
+
+    const summaryRow = summaryRows[0];
+
+    const summary = {
+      averageRating: Number(
+        Number(summaryRow.averageRating).toFixed(1)
+      ),
+      totalReviews: Number(summaryRow.totalReviews),
+      ratingCounts: {
+        5: Number(summaryRow.fiveStars || 0),
+        4: Number(summaryRow.fourStars || 0),
+        3: Number(summaryRow.threeStars || 0),
+        2: Number(summaryRow.twoStars || 0),
+        1: Number(summaryRow.oneStar || 0),
+      },
+      mediaCount: Number(summaryRow.mediaCount || 0),
+    };
+
+    // Lấy danh sách đánh giá mới nhất
+    const [reviewRows] = await pool.execute(
+      `SELECT
+        id,
+        product_id,
+        customer_name,
+        rating,
+        comment,
+        media,
+        created_at
+       FROM product_reviews
+       WHERE product_id = ?
+       ORDER BY created_at DESC, id DESC`,
+      [productId]
+    );
+
+    const reviews = reviewRows.map(formatReview);
+
+    res.json({
+      success: true,
+      productId,
+      summary,
+      count: reviews.length,
+      data: reviews,
+    });
+  } catch (error) {
+    console.error("Lỗi lấy đánh giá sản phẩm:", error.message);
+
+    res.status(500).json({
+      success: false,
+      message: "Không thể lấy đánh giá sản phẩm",
     });
   }
 });
@@ -269,7 +398,9 @@ app.put("/api/products/:id", async (req, res) => {
       return value;
     });
 
-    const setClause = updates.map((field) => `\`${field}\` = ?`).join(", ");
+    const setClause = updates
+      .map((field) => `\`${field}\` = ?`)
+      .join(", ");
 
     const [result] = await pool.execute(
       `UPDATE products SET ${setClause} WHERE id = ?`,

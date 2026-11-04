@@ -498,7 +498,6 @@
 
 /* ========================================
    LƯỚI SẢN PHẨM
-   DÙNG CHUNG THẺ SẢN PHẨM TỪ APP.CSS
 ======================================== */
 
 .products-page .product-grid {
@@ -508,11 +507,48 @@
   gap: 19px;
 }
 
-/*
-  Không viết lại .product-card, .product-image,
-  .product-info, .product-price, .add-button...
-  vì các class này dùng chung kiểu dáng từ App.css.
-*/
+/* ========================================
+   LIÊN KẾT MỞ TRANG CHI TIẾT
+======================================== */
+
+/* Khu vực ảnh sản phẩm có thể bấm */
+.products-page .product-image-link {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.products-page .product-image-link .product-photo {
+  transition: transform 0.3s ease;
+}
+
+.products-page .product-image-link:hover .product-photo {
+  transform: scale(1.05);
+}
+
+/* Tên sản phẩm có thể bấm */
+.products-page .product-name-link {
+  color: inherit;
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.products-page .product-name-link:hover {
+  color: var(--primary);
+}
+
+/* Hiển thị rõ khi dùng bàn phím */
+.products-page .product-image-link:focus-visible,
+.products-page .product-name-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
 
 /* ========================================
    KHÔNG CÓ SẢN PHẨM

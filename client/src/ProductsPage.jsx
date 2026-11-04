@@ -1,10 +1,9 @@
 
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 import Footer from "./components/Footer";
 
-import logo from "./assets/logo-anh-nguyet.png";
 import iconTrangTri from "./assets/icon-trang-tri.png";
 
 import "./ProductsPage.css";
@@ -128,6 +127,8 @@ function matchesPriceRange(price, range) {
 }
 
 function ProductsPage({ search, setSearch, setCart }) {
+  const navigate = useNavigate();
+
   const [products, setProducts] = useState([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
   const [productError, setProductError] = useState("");
@@ -297,6 +298,10 @@ function ProductsPage({ search, setSearch, setCart }) {
     setActivePrice("");
     setSearch("");
     setSort("default");
+  }
+
+  function openProductDetail(productId) {
+    navigate(`/san-pham/${productId}`);
   }
 
   return (
@@ -528,6 +533,19 @@ function ProductsPage({ search, setSearch, setCart }) {
                       <article
                         className="product-card"
                         key={productId}
+                        onClick={() => openProductDetail(productId)}
+                        onKeyDown={(event) => {
+                          if (
+                            event.key === "Enter" ||
+                            event.key === " "
+                          ) {
+                            event.preventDefault();
+                            openProductDetail(productId);
+                          }
+                        }}
+                        role="link"
+                        tabIndex={0}
+                        aria-label={`Xem chi tiết ${product.name}`}
                       >
                         <div
                           className={`product-image product-image-${index % 5}`}
@@ -577,7 +595,10 @@ function ProductsPage({ search, setSearch, setCart }) {
                               isFavorite ? "is-favorite" : ""
                             }`}
                             type="button"
-                            onClick={() => toggleFavorite(productId)}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              toggleFavorite(productId);
+                            }}
                             aria-label={
                               isFavorite
                                 ? "Bỏ yêu thích"
@@ -606,7 +627,10 @@ function ProductsPage({ search, setSearch, setCart }) {
                           <button
                             className="add-button"
                             type="button"
-                            onClick={() => addToCart(product)}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              addToCart(product);
+                            }}
                             disabled={Number(product.stock) <= 0}
                           >
                             <span aria-hidden="true">🛒</span>

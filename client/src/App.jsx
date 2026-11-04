@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Routes, Route, useNavigate } from "react-router-dom";
 
 import ProductsPage from "./ProductsPage";
+import ProductDetailPage from "./ProductDetailPage";
 import CartPage from "./CartPage";
 import Header from "./components/Header";
 import Footer from "./components/Footer";
@@ -140,6 +141,14 @@ function HomePage({ search, setSearch, setCart }) {
     );
   }
 
+  function openProductDetail(product) {
+    const productId = product._id ?? product.id;
+
+    if (!productId) return;
+
+    navigate(`/san-pham/${productId}`);
+  }
+
   return (
     <div className="home-page">
       <main id="trang-chu">
@@ -192,7 +201,10 @@ function HomePage({ search, setSearch, setCart }) {
                 aria-pressed={activeCategory === category.name}
               >
                 <img className="category-icon" src={category.icon} alt="" />
-                <span className="category-name" style={{ whiteSpace: "nowrap" }}>
+                <span
+                  className="category-name"
+                  style={{ whiteSpace: "nowrap" }}
+                >
                   {category.name}
                 </span>
               </button>
@@ -216,6 +228,7 @@ function HomePage({ search, setSearch, setCart }) {
               onClick={() => {
                 setActiveCategory("Tất cả");
                 setSearch("");
+                navigate("/san-pham");
               }}
             >
               Xem tất cả <span>→</span>
@@ -227,7 +240,9 @@ function HomePage({ search, setSearch, setCart }) {
           )}
 
           {productError && (
-            <p className="empty-message" role="alert">{productError}</p>
+            <p className="empty-message" role="alert">
+              {productError}
+            </p>
           )}
 
           <div
@@ -241,7 +256,21 @@ function HomePage({ search, setSearch, setCart }) {
               const isFavorite = favorites.includes(productId);
 
               return (
-                <article className="product-card" key={productId}>
+                <article
+                  className="product-card"
+                  key={productId}
+                  onClick={() => openProductDetail(product)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      openProductDetail(product);
+                    }
+                  }}
+                  tabIndex={0}
+                  role="link"
+                  aria-label={`Xem chi tiết ${product.name}`}
+                  style={{ cursor: "pointer" }}
+                >
                   <div className={`product-image product-image-${index % 5}`}>
                     <img
                       className="product-photo"
@@ -252,21 +281,29 @@ function HomePage({ search, setSearch, setCart }) {
                       }
                       alt={product.name}
                       loading="lazy"
-                      style={{ display: product.image ? "block" : "none" }}
+                      style={{
+                        display: product.image ? "block" : "none",
+                      }}
                       onError={(event) => {
                         event.currentTarget.style.display = "none";
+
                         const placeholder =
                           event.currentTarget.parentElement.querySelector(
                             ".product-placeholder"
                           );
-                        if (placeholder) placeholder.style.display = "flex";
+
+                        if (placeholder) {
+                          placeholder.style.display = "flex";
+                        }
                       }}
                     />
 
                     <span
                       className="product-placeholder"
                       aria-hidden="true"
-                      style={{ display: product.image ? "none" : "flex" }}
+                      style={{
+                        display: product.image ? "none" : "flex",
+                      }}
                     >
                       {getProductSymbol(product.category)}
                     </span>
@@ -278,8 +315,13 @@ function HomePage({ search, setSearch, setCart }) {
                         isFavorite ? "is-favorite" : ""
                       }`}
                       type="button"
-                      onClick={() => toggleFavorite(productId)}
-                      aria-label={isFavorite ? "Bỏ yêu thích" : "Thêm vào yêu thích"}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        toggleFavorite(productId);
+                      }}
+                      aria-label={
+                        isFavorite ? "Bỏ yêu thích" : "Thêm vào yêu thích"
+                      }
                     >
                       {isFavorite ? "♥" : "♡"}
                     </button>
@@ -287,19 +329,26 @@ function HomePage({ search, setSearch, setCart }) {
 
                   <div className="product-info">
                     <h3>{product.name}</h3>
+
                     <p className="product-detail">
                       {product.description || product.category}
                     </p>
+
                     <strong className="product-price">
                       {formatPrice(product.price)}
                     </strong>
+
                     <div className="product-rating">
                       <span>{product.category}</span>
                     </div>
+
                     <button
                       className="add-button"
                       type="button"
-                      onClick={() => addToCart(product)}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        addToCart(product);
+                      }}
                       disabled={Number(product.stock) <= 0}
                     >
                       <span aria-hidden="true">🛒</span>
@@ -313,13 +362,21 @@ function HomePage({ search, setSearch, setCart }) {
             })}
           </div>
 
-          {!loadingProducts && !productError && filteredProducts.length === 0 && (
-            <p className="empty-message">Không tìm thấy sản phẩm phù hợp.</p>
-          )}
+          {!loadingProducts &&
+            !productError &&
+            filteredProducts.length === 0 && (
+              <p className="empty-message">
+                Không tìm thấy sản phẩm phù hợp.
+              </p>
+            )}
         </section>
       </main>
 
-      {notice && <div className="toast-message" role="status">{notice}</div>}
+      {notice && (
+        <div className="toast-message" role="status">
+          {notice}
+        </div>
+      )}
 
       <Footer />
     </div>
@@ -333,6 +390,7 @@ function App() {
     try {
       const savedCart = localStorage.getItem("anh-nguyet-cart");
       const parsedCart = savedCart ? JSON.parse(savedCart) : [];
+
       return Array.isArray(parsedCart) ? parsedCart : [];
     } catch (error) {
       console.error("Không thể đọc giỏ hàng:", error);
@@ -382,6 +440,11 @@ function App() {
               setCart={setCart}
             />
           }
+        />
+
+        <Route
+          path="/san-pham/:id"
+          element={<ProductDetailPage cart={cart} setCart={setCart} />}
         />
 
         <Route
