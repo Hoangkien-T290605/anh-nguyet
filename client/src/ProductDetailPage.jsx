@@ -2,8 +2,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
-import Footer from "./components/Footer";
-
 import "./ProductDetailPage.css";
 import "./ProductsPage.css";
 
@@ -953,8 +951,6 @@ function ProductDetailPage({ cart = [], setCart }) {
           {notice}
         </div>
       )}
-
-      <Footer />
     </div>
   );
 }

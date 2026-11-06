@@ -1,13 +1,91 @@
-
 const express = require("express");
 const cors = require("cors");
 const mysql = require("mysql2/promise");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const multer = require("multer");
+const path = require("path");
+const fs = require("fs");
+const crypto = require("crypto");
+const nodemailer = require("nodemailer");
 require("dotenv").config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+
+// =========================
+// CẤU HÌNH UPLOAD ẢNH
+// =========================
+
+const avatarDirectory = path.join(__dirname, "uploads", "avatars");
+
+fs.mkdirSync(avatarDirectory, { recursive: true });
+
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+
+const allowedImageTypes = {
+  "image/jpeg": ".jpg",
+  "image/png": ".png",
+  "image/webp": ".webp",
+  "image/gif": ".gif",
+};
+
+const avatarStorage = multer.diskStorage({
+  destination: (req, file, callback) => {
+    callback(null, avatarDirectory);
+  },
+
+  filename: (req, file, callback) => {
+    const extension = allowedImageTypes[file.mimetype];
+    const filename =
+      `${Date.now()}-${crypto.randomBytes(8).toString("hex")}${extension}`;
+
+    callback(null, filename);
+  },
+});
+
+const uploadAvatar = multer({
+  storage: avatarStorage,
+  limits: {
+    fileSize: 5 * 1024 * 1024,
+    files: 1,
+  },
+  fileFilter: (req, file, callback) => {
+    if (!allowedImageTypes[file.mimetype]) {
+      return callback(
+        new Error("Chỉ chấp nhận ảnh JPG, PNG, WEBP hoặc GIF")
+      );
+    }
+
+    callback(null, true);
+  },
+}).single("avatar");
+
+async function deleteOldAvatar(avatarUrl) {
+  if (
+    typeof avatarUrl !== "string" ||
+    !avatarUrl.startsWith("/uploads/avatars/")
+  ) {
+    return;
+  }
+
+  const filename = path.basename(avatarUrl);
+
+  if (!filename || filename === "." || filename === "..") {
+    return;
+  }
+
+  const filePath = path.join(avatarDirectory, filename);
+
+  try {
+    await fs.promises.unlink(filePath);
+    console.log("Đã xóa ảnh đại diện cũ:", filename);
+  } catch (error) {
+    if (error.code !== "ENOENT") {
+      console.error("Lỗi xóa ảnh đại diện cũ:", error.message);
+    }
+  }
+}
 
 app.use(cors());
 app.use(express.json());
@@ -22,6 +100,31 @@ const pool = mysql.createPool({
   connectionLimit: 10,
   queueLimit: 0,
 });
+
+// =========================
+// QUẢN LÝ MÃ OTP ĐỔI MẬT KHẨU
+// =========================
+
+const passwordOtpStore = new Map();
+
+function createMailTransporter() {
+  const email = process.env.GMAIL_USER;
+  const appPassword = process.env.GMAIL_APP_PASSWORD?.replace(/\s/g, "");
+
+  if (!email || !appPassword) {
+    throw new Error(
+      "Chưa cấu hình GMAIL_USER và GMAIL_APP_PASSWORD trong file .env"
+    );
+  }
+
+  return nodemailer.createTransport({
+    service: "gmail",
+    auth: {
+      user: email,
+      pass: appPassword,
+    },
+  });
+}
 
 // =========================
 // HÀM HỖ TRỢ
@@ -69,6 +172,7 @@ function formatUser(row) {
     email: row.email,
     phone: row.phone,
     address: row.address,
+    avatar_url: row.avatar_url || null,
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
@@ -82,6 +186,14 @@ function formatAddress(row) {
     phone: row.phone,
     address: row.address,
     is_default: Boolean(row.is_default),
+    latitude:
+      row.latitude === null || row.latitude === undefined
+        ? null
+        : Number(row.latitude),
+    longitude:
+      row.longitude === null || row.longitude === undefined
+        ? null
+        : Number(row.longitude),
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
@@ -98,7 +210,6 @@ function createToken(user) {
   );
 }
 
-// Xác thực JWT
 function authenticateToken(req, res, next) {
   const authHeader = req.headers.authorization;
   const token = authHeader?.startsWith("Bearer ")
@@ -212,6 +323,46 @@ const allowedFields = [
   "active",
 ];
 
+// Kiểm tra tọa độ bản đồ
+function validateCoordinates(body) {
+  const { latitude, longitude } = body;
+
+  if (
+    (latitude === null) !== (longitude === null)
+  ) {
+    return "Vui lòng cung cấp đầy đủ kinh độ và vĩ độ";
+  }
+
+  if (latitude === undefined && longitude === undefined) {
+    return null;
+  }
+
+  if (latitude === null && longitude === null) {
+    return null;
+  }
+
+  if (
+    latitude === undefined ||
+    longitude === undefined ||
+    latitude === "" ||
+    longitude === "" ||
+    !Number.isFinite(Number(latitude)) ||
+    !Number.isFinite(Number(longitude))
+  ) {
+    return "Tọa độ bản đồ không hợp lệ";
+  }
+
+  if (Number(latitude) < -90 || Number(latitude) > 90) {
+    return "Vĩ độ phải nằm trong khoảng -90 đến 90";
+  }
+
+  if (Number(longitude) < -180 || Number(longitude) > 180) {
+    return "Kinh độ phải nằm trong khoảng -180 đến 180";
+  }
+
+  return null;
+}
+
 // Kiểm tra dữ liệu địa chỉ
 function validateAddress(body) {
   if (
@@ -246,7 +397,15 @@ function validateAddress(body) {
     return "Trạng thái mặc định không hợp lệ";
   }
 
-  return null;
+  return validateCoordinates(body);
+}
+
+// Đồng bộ địa chỉ mặc định vào hồ sơ tài khoản
+async function syncDefaultAddressToProfile(connection, userId, address) {
+  await connection.execute(
+    "UPDATE users SET address = ? WHERE id = ?",
+    [address || null, userId]
+  );
 }
 
 // =========================
@@ -374,7 +533,8 @@ app.post("/api/auth/register", async (req, res) => {
     );
 
     const [rows] = await pool.execute(
-      `SELECT id, full_name, email, phone, address, created_at, updated_at
+      `SELECT id, full_name, email, phone, address, avatar_url,
+              created_at, updated_at
        FROM users WHERE id = ?`,
       [result.insertId]
     );
@@ -433,6 +593,7 @@ app.post("/api/auth/login", async (req, res) => {
     }
 
     const userRow = rows[0];
+
     const passwordMatches = await bcrypt.compare(
       password,
       userRow.password
@@ -464,11 +625,12 @@ app.post("/api/auth/login", async (req, res) => {
   }
 });
 
-// Lấy thông tin tài khoản đang đăng nhập
+// Lấy thông tin tài khoản
 app.get("/api/auth/me", authenticateToken, async (req, res) => {
   try {
     const [rows] = await pool.execute(
-      `SELECT id, full_name, email, phone, address, created_at, updated_at
+      `SELECT id, full_name, email, phone, address, avatar_url,
+              created_at, updated_at
        FROM users WHERE id = ?`,
       [req.user.id]
     );
@@ -494,8 +656,10 @@ app.get("/api/auth/me", authenticateToken, async (req, res) => {
   }
 });
 
-// Cập nhật thông tin tài khoản
+// Cập nhật thông tin tài khoản và đồng bộ địa chỉ
 app.put("/api/auth/me", authenticateToken, async (req, res) => {
+  const connection = await pool.getConnection();
+
   try {
     const { full_name, phone, address } = req.body;
 
@@ -558,25 +722,84 @@ app.put("/api/auth/me", authenticateToken, async (req, res) => {
       });
     }
 
-    values.push(req.user.id);
+    await connection.beginTransaction();
 
-    await pool.execute(
-      `UPDATE users SET ${updates.join(", ")} WHERE id = ?`,
-      values
-    );
-
-    const [rows] = await pool.execute(
-      `SELECT id, full_name, email, phone, address, created_at, updated_at
-       FROM users WHERE id = ?`,
+    const [userRows] = await connection.execute(
+      `SELECT id, full_name, phone, address
+       FROM users WHERE id = ? FOR UPDATE`,
       [req.user.id]
     );
 
-    if (!rows.length) {
+    if (!userRows.length) {
+      await connection.rollback();
+
       return res.status(404).json({
         success: false,
         message: "Không tìm thấy tài khoản",
       });
     }
+
+    const currentUser = userRows[0];
+
+    values.push(req.user.id);
+
+    await connection.execute(
+      `UPDATE users SET ${updates.join(", ")} WHERE id = ?`,
+      values
+    );
+
+    if (address !== undefined && address?.trim()) {
+      const [defaultRows] = await connection.execute(
+        `SELECT id
+         FROM user_addresses
+         WHERE user_id = ? AND is_default = TRUE
+         LIMIT 1`,
+        [req.user.id]
+      );
+
+      if (defaultRows.length) {
+        await connection.execute(
+          `UPDATE user_addresses
+           SET address = ?, latitude = NULL, longitude = NULL
+           WHERE id = ? AND user_id = ?`,
+          [
+            address.trim(),
+            defaultRows[0].id,
+            req.user.id,
+          ]
+        );
+      } else if (phone?.trim() || currentUser.phone) {
+        const recipientPhone = phone?.trim() || currentUser.phone;
+
+        await connection.execute(
+          `UPDATE user_addresses
+           SET is_default = FALSE
+           WHERE user_id = ?`,
+          [req.user.id]
+        );
+
+        await connection.execute(
+          `INSERT INTO user_addresses
+            (user_id, recipient_name, phone, address, is_default)
+           VALUES (?, ?, ?, ?, TRUE)`,
+          [
+            req.user.id,
+            full_name?.trim() || currentUser.full_name,
+            recipientPhone,
+            address.trim(),
+          ]
+        );
+      }
+    }
+
+    const [rows] = await connection.execute(
+      `SELECT id, full_name, email, phone, address, avatar_url,
+              created_at, updated_at
+       FROM users WHERE id = ?`,
+      [req.user.id]
+    );
+
+    await connection.commit();
 
     res.json({
       success: true,
@@ -584,20 +807,380 @@ app.put("/api/auth/me", authenticateToken, async (req, res) => {
       user: formatUser(rows[0]),
     });
   } catch (error) {
+    await connection.rollback();
+
     console.error("Lỗi cập nhật tài khoản:", error.message);
 
     res.status(500).json({
       success: false,
       message: "Không thể cập nhật thông tin tài khoản",
     });
+  } finally {
+    connection.release();
   }
 });
+
+// =========================
+// API ĐỔI MẬT KHẨU BẰNG OTP
+// =========================
+
+// Bước 1: Kiểm tra mật khẩu hiện tại và gửi OTP
+app.post(
+  "/api/auth/change-password/request-otp",
+  authenticateToken,
+  async (req, res) => {
+    try {
+      const {
+        current_password,
+        new_password,
+        confirm_password,
+      } = req.body;
+
+      if (
+        typeof current_password !== "string" ||
+        !current_password ||
+        typeof new_password !== "string" ||
+        typeof confirm_password !== "string"
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "Vui lòng nhập đầy đủ thông tin mật khẩu",
+        });
+      }
+
+      if (new_password.length < 8) {
+        return res.status(400).json({
+          success: false,
+          message: "Mật khẩu mới phải có ít nhất 8 ký tự",
+        });
+      }
+
+      if (new_password.length > 72) {
+        return res.status(400).json({
+          success: false,
+          message: "Mật khẩu mới không được vượt quá 72 ký tự",
+        });
+      }
+
+      if (new_password !== confirm_password) {
+        return res.status(400).json({
+          success: false,
+          message: "Mật khẩu xác nhận không khớp",
+        });
+      }
+
+      const [users] = await pool.execute(
+        "SELECT id, email, password FROM users WHERE id = ?",
+        [req.user.id]
+      );
+
+      if (!users.length) {
+        return res.status(404).json({
+          success: false,
+          message: "Không tìm thấy tài khoản",
+        });
+      }
+
+      const user = users[0];
+
+      const passwordMatches = await bcrypt.compare(
+        current_password,
+        user.password
+      );
+
+      if (!passwordMatches) {
+        return res.status(400).json({
+          success: false,
+          message: "Mật khẩu hiện tại không chính xác",
+        });
+      }
+
+      const isSamePassword = await bcrypt.compare(
+        new_password,
+        user.password
+      );
+
+      if (isSamePassword) {
+        return res.status(400).json({
+          success: false,
+          message: "Mật khẩu mới phải khác mật khẩu hiện tại",
+        });
+      }
+
+      if (!user.email) {
+        return res.status(400).json({
+          success: false,
+          message: "Tài khoản chưa có địa chỉ email",
+        });
+      }
+
+      const otp = crypto.randomInt(100000, 1000000).toString();
+
+      const otpHash = crypto
+        .createHash("sha256")
+        .update(otp)
+        .digest("hex");
+
+      const newPasswordHash = await bcrypt.hash(new_password, 12);
+
+      passwordOtpStore.set(String(req.user.id), {
+        otpHash,
+        newPasswordHash,
+        expiresAt: Date.now() + 5 * 60 * 1000,
+        attempts: 0,
+      });
+
+      try {
+        const transporter = createMailTransporter();
+
+        await transporter.sendMail({
+          from: `"Ánh Nguyệt" <${process.env.GMAIL_USER}>`,
+          to: user.email,
+          subject: "Mã xác nhận đổi mật khẩu - Ánh Nguyệt",
+          text:
+            `Xin chào,\n\n` +
+            `Mã OTP để xác nhận đổi mật khẩu của bạn là: ${otp}\n\n` +
+            `Mã có hiệu lực trong 5 phút.\n` +
+            `Vui lòng không chia sẻ mã này với bất kỳ ai.\n\n` +
+            `Trân trọng,\nÁnh Nguyệt`,
+          html: `
+            <div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;padding:24px;color:#342747">
+              <h2 style="color:#8056a8">Ánh Nguyệt</h2>
+              <h3>Xác nhận đổi mật khẩu</h3>
+              <p>Xin chào,</p>
+              <p>Mã OTP xác nhận đổi mật khẩu của bạn là:</p>
+              <div style="font-size:32px;font-weight:bold;letter-spacing:8px;color:#8056a8;padding:18px 0">
+                ${otp}
+              </div>
+              <p>Mã có hiệu lực trong <strong>5 phút</strong>.</p>
+              <p>Vui lòng không chia sẻ mã này với bất kỳ ai.</p>
+              <hr style="border:none;border-top:1px solid #eee">
+              <p style="color:#888;font-size:12px">
+                Email tự động từ hệ thống Ánh Nguyệt. Vui lòng không trả lời email này.
+              </p>
+            </div>
+          `,
+        });
+      } catch (mailError) {
+        passwordOtpStore.delete(String(req.user.id));
+
+        console.error("Lỗi gửi email OTP:", mailError.message);
+
+        return res.status(500).json({
+          success: false,
+          message:
+            "Không thể gửi mã OTP. Vui lòng kiểm tra cấu hình email trong server/.env",
+        });
+      }
+
+      res.json({
+        success: true,
+        message: "Mã OTP đã được gửi đến email đăng ký của bạn",
+      });
+    } catch (error) {
+      console.error("Lỗi yêu cầu OTP đổi mật khẩu:", error.message);
+
+      res.status(500).json({
+        success: false,
+        message: "Không thể gửi mã OTP",
+      });
+    }
+  }
+);
+
+// Bước 2: Xác nhận OTP và cập nhật mật khẩu
+app.post(
+  "/api/auth/change-password/verify-otp",
+  authenticateToken,
+  async (req, res) => {
+    try {
+      const { otp } = req.body;
+
+      if (
+        typeof otp !== "string" ||
+        !/^\d{6}$/.test(otp)
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "Vui lòng nhập mã OTP gồm 6 chữ số",
+        });
+      }
+
+      const userId = String(req.user.id);
+      const otpData = passwordOtpStore.get(userId);
+
+      if (!otpData) {
+        return res.status(400).json({
+          success: false,
+          message: "Không tìm thấy mã OTP. Vui lòng yêu cầu gửi mã mới",
+        });
+      }
+
+      if (Date.now() > otpData.expiresAt) {
+        passwordOtpStore.delete(userId);
+
+        return res.status(400).json({
+          success: false,
+          message: "Mã OTP đã hết hạn. Vui lòng yêu cầu gửi mã mới",
+        });
+      }
+
+      if (otpData.attempts >= 5) {
+        passwordOtpStore.delete(userId);
+
+        return res.status(400).json({
+          success: false,
+          message: "Bạn đã nhập sai OTP quá số lần cho phép. Vui lòng gửi mã mới",
+        });
+      }
+
+      const submittedOtpHash = crypto
+        .createHash("sha256")
+        .update(otp)
+        .digest("hex");
+
+      if (submittedOtpHash !== otpData.otpHash) {
+        otpData.attempts += 1;
+
+        if (otpData.attempts >= 5) {
+          passwordOtpStore.delete(userId);
+        }
+
+        return res.status(400).json({
+          success: false,
+          message: "Mã OTP không chính xác",
+        });
+      }
+
+      const [result] = await pool.execute(
+        `UPDATE users
+         SET password = ?, updated_at = CURRENT_TIMESTAMP
+         WHERE id = ?`,
+        [otpData.newPasswordHash, req.user.id]
+      );
+
+      if (result.affectedRows === 0) {
+        passwordOtpStore.delete(userId);
+
+        return res.status(404).json({
+          success: false,
+          message: "Không tìm thấy tài khoản để cập nhật mật khẩu",
+        });
+      }
+
+      passwordOtpStore.delete(userId);
+
+      res.json({
+        success: true,
+        message: "Đổi mật khẩu thành công",
+      });
+    } catch (error) {
+      console.error("Lỗi xác nhận OTP:", error.message);
+
+      res.status(500).json({
+        success: false,
+        message: "Không thể xác nhận OTP và đổi mật khẩu",
+      });
+    }
+  }
+);
+
+// =========================
+// API ẢNH ĐẠI DIỆN
+// =========================
+
+app.post(
+  "/api/auth/avatar",
+  authenticateToken,
+  (req, res, next) => {
+    uploadAvatar(req, res, (error) => {
+      if (error) {
+        let message = error.message;
+
+        if (error instanceof multer.MulterError) {
+          if (error.code === "LIMIT_FILE_SIZE") {
+            message = "Ảnh đại diện không được vượt quá 5MB";
+          } else {
+            message = "Không thể tải ảnh lên";
+          }
+        }
+
+        return res.status(400).json({
+          success: false,
+          message,
+        });
+      }
+
+      next();
+    });
+  },
+  async (req, res) => {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: "Vui lòng chọn ảnh đại diện",
+      });
+    }
+
+    const newAvatarUrl = `/uploads/avatars/${req.file.filename}`;
+
+    try {
+      const [existingRows] = await pool.execute(
+        "SELECT avatar_url FROM users WHERE id = ?",
+        [req.user.id]
+      );
+
+      if (!existingRows.length) {
+        await deleteOldAvatar(newAvatarUrl);
+
+        return res.status(404).json({
+          success: false,
+          message: "Không tìm thấy tài khoản",
+        });
+      }
+
+      const oldAvatarUrl = existingRows[0].avatar_url;
+
+      await pool.execute(
+        "UPDATE users SET avatar_url = ? WHERE id = ?",
+        [newAvatarUrl, req.user.id]
+      );
+
+      const [rows] = await pool.execute(
+        `SELECT id, full_name, email, phone, address, avatar_url,
+                created_at, updated_at
+         FROM users WHERE id = ?`,
+        [req.user.id]
+      );
+
+      if (oldAvatarUrl && oldAvatarUrl !== newAvatarUrl) {
+        await deleteOldAvatar(oldAvatarUrl);
+      }
+
+      res.json({
+        success: true,
+        message: "Cập nhật ảnh đại diện thành công",
+        avatar_url: newAvatarUrl,
+        user: formatUser(rows[0]),
+      });
+    } catch (error) {
+      await deleteOldAvatar(newAvatarUrl);
+
+      console.error("Lỗi upload ảnh đại diện:", error.message);
+
+      res.status(500).json({
+        success: false,
+        message: "Không thể cập nhật ảnh đại diện",
+      });
+    }
+  }
+);
 
 // =========================
 // API QUẢN LÝ ĐỊA CHỈ
 // =========================
 
-// Lấy danh sách địa chỉ của tài khoản
+// Lấy danh sách địa chỉ
 app.get("/api/auth/addresses", authenticateToken, async (req, res) => {
   try {
     const [rows] = await pool.execute(
@@ -658,16 +1241,27 @@ app.post("/api/auth/addresses", authenticateToken, async (req, res) => {
 
     const [result] = await connection.execute(
       `INSERT INTO user_addresses
-        (user_id, recipient_name, phone, address, is_default)
-       VALUES (?, ?, ?, ?, ?)`,
+        (user_id, recipient_name, phone, address,
+         is_default, latitude, longitude)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [
         req.user.id,
         req.body.recipient_name.trim(),
         req.body.phone.trim(),
         req.body.address.trim(),
         shouldBeDefault,
+        req.body.latitude ?? null,
+        req.body.longitude ?? null,
       ]
     );
+
+    if (shouldBeDefault) {
+      await syncDefaultAddressToProfile(
+        connection,
+        req.user.id,
+        req.body.address.trim()
+      );
+    }
 
     const [rows] = await connection.execute(
       "SELECT * FROM user_addresses WHERE id = ? AND user_id = ?",
@@ -683,6 +1277,7 @@ app.post("/api/auth/addresses", authenticateToken, async (req, res) => {
     });
   } catch (error) {
     await connection.rollback();
+
     console.error("Lỗi thêm địa chỉ:", error.message);
 
     res.status(500).json({
@@ -733,10 +1328,22 @@ app.put("/api/auth/addresses/:id", authenticateToken, async (req, res) => {
       });
     }
 
+    const oldAddress = existingRows[0];
+
     const shouldBeDefault =
       req.body.is_default === undefined
-        ? Boolean(existingRows[0].is_default)
+        ? Boolean(oldAddress.is_default)
         : req.body.is_default === true || req.body.is_default === 1;
+
+    const latitude =
+      req.body.latitude === undefined
+        ? oldAddress.latitude
+        : req.body.latitude;
+
+    const longitude =
+      req.body.longitude === undefined
+        ? oldAddress.longitude
+        : req.body.longitude;
 
     if (shouldBeDefault) {
       await connection.execute(
@@ -747,17 +1354,32 @@ app.put("/api/auth/addresses/:id", authenticateToken, async (req, res) => {
 
     await connection.execute(
       `UPDATE user_addresses
-       SET recipient_name = ?, phone = ?, address = ?, is_default = ?
+       SET recipient_name = ?,
+           phone = ?,
+           address = ?,
+           is_default = ?,
+           latitude = ?,
+           longitude = ?
        WHERE id = ? AND user_id = ?`,
       [
         req.body.recipient_name.trim(),
         req.body.phone.trim(),
         req.body.address.trim(),
         shouldBeDefault,
+        latitude,
+        longitude,
         id,
         req.user.id,
       ]
     );
+
+    if (shouldBeDefault) {
+      await syncDefaultAddressToProfile(
+        connection,
+        req.user.id,
+        req.body.address.trim()
+      );
+    }
 
     const [rows] = await connection.execute(
       "SELECT * FROM user_addresses WHERE id = ? AND user_id = ?",
@@ -773,6 +1395,7 @@ app.put("/api/auth/addresses/:id", authenticateToken, async (req, res) => {
     });
   } catch (error) {
     await connection.rollback();
+
     console.error("Lỗi cập nhật địa chỉ:", error.message);
 
     res.status(500).json({
@@ -804,7 +1427,7 @@ app.patch(
       await connection.beginTransaction();
 
       const [existingRows] = await connection.execute(
-        "SELECT id FROM user_addresses WHERE id = ? AND user_id = ?",
+        "SELECT * FROM user_addresses WHERE id = ? AND user_id = ?",
         [id, req.user.id]
       );
 
@@ -823,8 +1446,16 @@ app.patch(
       );
 
       await connection.execute(
-        "UPDATE user_addresses SET is_default = TRUE WHERE id = ? AND user_id = ?",
+        `UPDATE user_addresses
+         SET is_default = TRUE
+         WHERE id = ? AND user_id = ?`,
         [id, req.user.id]
+      );
+
+      await syncDefaultAddressToProfile(
+        connection,
+        req.user.id,
+        existingRows[0].address
       );
 
       const [rows] = await connection.execute(
@@ -841,6 +1472,7 @@ app.patch(
       });
     } catch (error) {
       await connection.rollback();
+
       console.error("Lỗi đặt địa chỉ mặc định:", error.message);
 
       res.status(500).json({
@@ -895,7 +1527,7 @@ app.delete(
 
       if (wasDefault) {
         const [remainingRows] = await connection.execute(
-          `SELECT id
+          `SELECT *
            FROM user_addresses
            WHERE user_id = ?
            ORDER BY created_at ASC, id ASC
@@ -905,8 +1537,22 @@ app.delete(
 
         if (remainingRows.length) {
           await connection.execute(
-            "UPDATE user_addresses SET is_default = TRUE WHERE id = ? AND user_id = ?",
+            `UPDATE user_addresses
+             SET is_default = TRUE
+             WHERE id = ? AND user_id = ?`,
             [remainingRows[0].id, req.user.id]
+          );
+
+          await syncDefaultAddressToProfile(
+            connection,
+            req.user.id,
+            remainingRows[0].address
+          );
+        } else {
+          await syncDefaultAddressToProfile(
+            connection,
+            req.user.id,
+            null
           );
         }
       }
@@ -919,6 +1565,7 @@ app.delete(
       });
     } catch (error) {
       await connection.rollback();
+
       console.error("Lỗi xóa địa chỉ:", error.message);
 
       res.status(500).json({

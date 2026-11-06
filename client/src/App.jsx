@@ -5,6 +5,8 @@ import { Routes, Route, useNavigate } from "react-router-dom";
 import ProductsPage from "./ProductsPage";
 import ProductDetailPage from "./ProductDetailPage";
 import CartPage from "./CartPage";
+import AuthPage from "./AuthPage";
+import AccountPage from "./AccountPage";
 import Header from "./components/Header";
 import Footer from "./components/Footer";
 
@@ -377,8 +379,6 @@ function HomePage({ search, setSearch, setCart }) {
           {notice}
         </div>
       )}
-
-      <Footer />
     </div>
   );
 }
@@ -451,7 +451,14 @@ function App() {
           path="/gio-hang"
           element={<CartPage cart={cart} setCart={setCart} />}
         />
+
+        <Route path="/dang-nhap" element={<AuthPage />} />
+        <Route path="/dang-ky" element={<AuthPage />} />
+
+        <Route path="/tai-khoan/*" element={<AccountPage />} />
       </Routes>
+
+      <Footer />
     </div>
   );
 }

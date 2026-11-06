@@ -9,6 +9,8 @@ import {
 } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import accountIcon from "./assets/icon-tai-khoan.png";
+import PasswordChangeForm from "./PasswordChangeForm";
 import "./AccountPage.css";
 
 const API_URL = "http://localhost:5000/api/auth";
@@ -818,7 +820,9 @@ function AccountPage() {
     return (
       <main className="account-page">
         <div className="account-login-required">
-          <div className="account-empty-symbol">♙</div>
+          <div className="account-empty-symbol">
+            <img src={accountIcon} alt="Tài khoản" />
+          </div>
           <h1>Bạn chưa đăng nhập</h1>
           <p>Vui lòng đăng nhập để quản lý thông tin tài khoản.</p>
           <Link className="account-primary-button" to="/dang-nhap">
@@ -862,7 +866,9 @@ function AccountPage() {
           <nav className="account-navigation" aria-label="Tài khoản">
             <div className="account-menu-group">
               <div className="account-menu-heading">
-                <span className="account-menu-icon">♙</span>
+                <span className="account-menu-icon">
+                  <img src={accountIcon} alt="" />
+                </span>
                 <span>Tài khoản của tôi</span>
               </div>
 
@@ -1151,12 +1157,7 @@ function AccountPage() {
               </div>
             </>
           ) : isPasswordPage ? (
-            <div className="account-coming-soon">
-              <span className="account-eyebrow">BẢO MẬT TÀI KHOẢN</span>
-              <div className="account-empty-symbol">✧</div>
-              <h1>Đổi mật khẩu</h1>
-              <p>Chức năng đổi mật khẩu sẽ được hoàn thiện ở bước tiếp theo.</p>
-            </div>
+            <PasswordChangeForm token={getAuth()?.token} />
           ) : (
             <>
               <div className="account-content-heading">

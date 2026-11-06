@@ -1,0 +1,266 @@
+
+/* ========================================
+   BỐ CỤC CHUNG: ĐẨY FOOTER XUỐNG CUỐI TRANG
+======================================== */
+
+.site-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.site-shell > .site-footer {
+  margin-top: auto;
+}
+
+/* ========================================
+   FOOTER
+======================================== */
+
+.site-footer {
+  width: 100%;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: 1.25fr 0.75fr 1.2fr 1.5fr 1.2fr;
+  gap: 32px;
+  padding: 48px 5%;
+  background: linear-gradient(135deg, #302044 0%, #493064 55%, #38264f 100%);
+  color: #f8f2ff;
+  border-top: 1px solid rgba(220, 196, 255, 0.2);
+  font-size: 14px;
+}
+
+.site-footer a {
+  color: #e9dcf8;
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.site-footer a:hover {
+  color: #e8c98a;
+}
+
+/* ========================================
+   THƯƠNG HIỆU
+======================================== */
+
+.footer-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.footer-logo {
+  display: inline-flex;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.footer-logo img {
+  display: block;
+  width: 125px;
+  max-width: 100%;
+  height: auto;
+  object-fit: contain;
+}
+
+.footer-brand p {
+  margin: 0 0 24px;
+  color: #e8c98a;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.footer-brand small {
+  margin-top: auto;
+  color: #c8bad8;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+/* ========================================
+   CÁC CỘT THÔNG TIN
+======================================== */
+
+.footer-column {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+}
+
+.footer-column h3 {
+  margin: 0 0 8px;
+  color: #f1d59e;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.footer-column > a {
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+/* ========================================
+   THÔNG TIN LIÊN HỆ
+======================================== */
+
+.contact-column {
+  gap: 14px;
+}
+
+.contact-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0;
+  color: #e9dcf8;
+  font-size: 13px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.contact-item img {
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  object-fit: contain;
+}
+
+.contact-item a {
+  color: inherit;
+}
+
+.contact-symbol {
+  flex-shrink: 0;
+  width: 18px;
+  color: #e8c98a;
+  font-size: 17px;
+  text-align: center;
+}
+
+/* ========================================
+   MẠNG XÃ HỘI
+======================================== */
+
+.social-links {
+  display: flex;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.social-links a {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid rgba(232, 201, 138, 0.55);
+  border-radius: 50%;
+  color: #f1d59e;
+  font-size: 16px;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.social-links a:hover {
+  background: #e8c98a;
+  color: #302044;
+  transform: translateY(-2px);
+}
+
+/* ========================================
+   ĐĂNG KÝ NHẬN TIN
+======================================== */
+
+.footer-newsletter p {
+  margin: 0;
+  color: #d5c8e2;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.newsletter-form {
+  display: flex;
+  width: 100%;
+  max-width: 280px;
+  min-width: 0;
+  margin-top: 6px;
+  overflow: hidden;
+  border: 1px solid rgba(232, 201, 138, 0.5);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.newsletter-form input {
+  flex: 1;
+  width: 0;
+  min-width: 0;
+  padding: 11px 10px;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: #ffffff;
+  font-family: inherit;
+  font-size: 12px;
+}
+
+.newsletter-form input::placeholder {
+  color: #c8bad8;
+}
+
+.newsletter-form button {
+  flex-shrink: 0;
+  width: 42px;
+  border: none;
+  background: #e8c98a;
+  color: #302044;
+  font-size: 17px;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.newsletter-form button:hover {
+  background: #f3dcae;
+}
+
+/* ========================================
+   RESPONSIVE
+======================================== */
+
+@media (max-width: 1100px) {
+  .site-footer {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 36px 28px;
+  }
+}
+
+@media (max-width: 700px) {
+  .site-footer {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 32px 20px;
+    padding: 36px 6%;
+  }
+
+  .footer-brand {
+    grid-column: 1 / -1;
+  }
+
+  .footer-newsletter {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 420px) {
+  .site-footer {
+    grid-template-columns: 1fr;
+    gap: 28px;
+    padding: 32px 20px;
+  }
+
+  .footer-brand,
+  .footer-newsletter {
+    grid-column: auto;
+  }
+}

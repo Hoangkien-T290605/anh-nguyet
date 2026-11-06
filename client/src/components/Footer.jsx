@@ -1,5 +1,6 @@
 
 import { Link } from "react-router-dom";
+import "./Footer.css";
 
 import logo from "../assets/logo-anh-nguyet.png";
 import iconPhone from "../assets/icon-phone.png";

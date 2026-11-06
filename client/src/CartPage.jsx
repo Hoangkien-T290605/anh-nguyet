@@ -1,6 +1,4 @@
-
 import { Link } from "react-router-dom";
-import Footer from "./components/Footer";
 import "./CartPage.css";
 
 const formatPrice = (price) =>
@@ -211,8 +209,6 @@ function CartPage({ cart = [], setCart }) {
           </section>
         )}
       </main>
-
-      <Footer />
     </div>
   );
 }

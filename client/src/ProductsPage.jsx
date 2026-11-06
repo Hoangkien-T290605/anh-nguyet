@@ -2,8 +2,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
-import Footer from "./components/Footer";
-
 import iconTrangTri from "./assets/icon-trang-tri.png";
 
 import "./ProductsPage.css";
@@ -671,8 +669,6 @@ function ProductsPage({ search, setSearch, setCart }) {
           {notice}
         </div>
       )}
-
-      <Footer />
     </div>
   );
 }

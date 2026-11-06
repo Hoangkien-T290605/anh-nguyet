@@ -103,10 +103,21 @@
 }
 
 .account-menu-icon {
+  display: inline-flex;
   width: 21px;
+  height: 21px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
   color: #8a62b8;
-  font-size: 18px;
   text-align: center;
+}
+
+.account-menu-icon img {
+  display: block;
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
 }
 
 .account-menu-link {
@@ -891,6 +902,13 @@
   background: #f1eafa;
   color: #8c65b5;
   font-size: 27px;
+}
+
+.account-empty-symbol img {
+  display: block;
+  width: 30px;
+  height: 30px;
+  object-fit: contain;
 }
 
 .account-address-empty h2 {
