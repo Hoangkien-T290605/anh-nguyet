@@ -1,5 +1,4 @@
-﻿
-# Dependencies
+﻿# Dependencies
 node_modules/
 **/node_modules/
 
@@ -24,3 +23,6 @@ Thumbs.db
 
 # User uploaded files
 server/uploads/
+
+# Database backups (contain private user data)
+database/anh_nguyet_full_backup.sql
