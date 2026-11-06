@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <link rel="stylesheet" href="./site.css" />
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#7041a6" />
+    <title>Đăng nhập | Ánh Nguyệt</title>
+  </head>
+  <body data-page="login">
+    <div class="site-shell">
+      <div id="site-header"></div>
+      <div id="page-content">
+        <main class="auth-page">
+          <section class="auth-card">
+            <a href="index.html" class="auth-logo-link"><img src="" alt="Ánh Nguyệt" class="auth-logo" data-auth-logo /></a>
+            <div class="auth-heading">
+              <p class="auth-eyebrow">CHÀO MỪNG BẠN ĐẾN VỚI</p>
+              <h1>Đăng nhập</h1>
+              <p class="auth-description">Đăng nhập để tiếp tục mua sắm cùng Ánh Nguyệt.</p>
+            </div>
+            <div class="auth-success" id="auth-success" hidden></div>
+            <form class="auth-form" id="auth-form" novalidate>
+              <div class="auth-field"><label for="email">Email</label><input id="email" name="email" type="email" placeholder="Nhập địa chỉ email" maxlength="150" autocomplete="email" required /></div>
+              <div class="auth-field"><label for="password">Mật khẩu</label><div class="auth-password-wrap"><input id="password" name="password" type="password" placeholder="Nhập mật khẩu" autocomplete="current-password" required /><button type="button" class="auth-password-toggle" data-password-toggle aria-label="Hiện mật khẩu" aria-pressed="false">Hiện</button></div></div>
+              <p class="auth-error" id="auth-error" role="alert" hidden></p>
+              <button type="submit" class="auth-submit" id="auth-submit">Đăng nhập</button>
+            </form>
+            <div class="auth-switch">Bạn chưa có tài khoản? <a href="register.html">Đăng ký ngay</a></div>
+            <a href="index.html" class="auth-back-home">← Quay về trang chủ</a>
+          </section>
+        </main>
+      </div>
+      <div id="footer-container"></div>
+    </div>
+    <script src="./config.js"></script><script type="module" src="./src/js/main.js"></script>
+  </body>
+</html>

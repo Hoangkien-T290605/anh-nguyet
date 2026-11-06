@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <link rel="stylesheet" href="./site.css" />
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Khám phá các sản phẩm từ gạo được tuyển chọn bởi Ánh Nguyệt."
+    />
+    <meta name="theme-color" content="#7041a6" />
+    <title>Ánh Nguyệt | Tinh hoa từ đất</title>
+  </head>
+  <body data-page="home">
+    <div class="site-shell">
+      <div id="site-header"></div>
+      <div id="page-content">
+        <main id="trang-chu" class="mx-auto w-full">
+          <section class="hero" aria-label="Banner Ánh Nguyệt">
+            <img class="hero-image" data-hero alt="Tinh hoa từ đất, sáng bừng vị ngon" />
+            <a class="hero-button" href="#danh-muc">
+              KHÁM PHÁ NGAY <span aria-hidden="true">→</span>
+            </a>
+          </section>
+
+          <section class="content-section" id="danh-muc">
+            <div class="section-heading">
+              <div class="heading-title">
+                <img class="heading-decoration" data-decoration alt="" />
+                <div>
+                  <h2>Danh mục sản phẩm</h2>
+                  <p>Khám phá các dòng sản phẩm đa dạng của Ánh Nguyệt</p>
+                </div>
+              </div>
+              <a class="text-link" href="products.html">
+                Xem tất cả danh mục <span>→</span>
+              </a>
+            </div>
+            <div class="category-grid" id="category-grid" aria-label="Danh mục sản phẩm"></div>
+          </section>
+
+          <section class="content-section products-section" id="san-pham">
+            <div class="section-heading">
+              <div class="heading-title">
+                <img class="heading-decoration" data-decoration alt="" />
+                <div>
+                  <h2>Sản phẩm nổi bật</h2>
+                  <p>Những sản phẩm được yêu thích nhất hiện nay</p>
+                </div>
+              </div>
+              <a class="text-link" href="products.html">
+                Xem tất cả <span>→</span>
+              </a>
+            </div>
+            <p class="empty-message" id="product-status" role="status" aria-live="polite">
+              Đang tải sản phẩm...
+            </p>
+            <div class="product-grid" id="product-grid" hidden></div>
+          </section>
+        </main>
+      </div>
+      <div id="footer-container"></div>
+    </div>
+    <div class="toast-message" id="site-toast" role="status" aria-live="polite" hidden></div>
+    <script src="./config.js"></script><script type="module" src="./src/js/main.js"></script>
+  </body>
+</html>

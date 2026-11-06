@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <link rel="stylesheet" href="./site.css" />
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#7041a6" />
+    <title>Sản phẩm | Ánh Nguyệt</title>
+  </head>
+  <body data-page="products">
+    <div class="site-shell">
+      <div id="site-header"></div>
+      <div id="page-content">
+        <div class="products-page">
+          <main class="products-main">
+            <div class="products-breadcrumb"><a href="index.html">TRANG CHỦ</a><span>/</span><span>SẢN PHẨM</span></div>
+            <section class="products-title-section">
+              <div class="products-title-decoration"><img src="/src/assets/icon-trang-tri.png" alt="" /></div>
+              <div><p class="products-eyebrow">ÁNH NGUYỆT COLLECTION</p><h1>DANH MỤC SẢN PHẨM ÁNH NGUYỆT</h1><p class="products-subtitle">Khám phá những sản phẩm tinh túy từ hạt gạo Việt Nam.</p></div>
+            </section>
+            <section class="products-layout">
+              <aside class="products-sidebar">
+                <div class="sidebar-heading"><span class="sidebar-heading-icon">☷</span><h2>DANH MỤC</h2></div>
+                <button type="button" class="sidebar-all selected" data-category="Tất cả"><span>Tất cả sản phẩm</span><span class="sidebar-arrow">›</span></button>
+                <div class="sidebar-category-list" id="product-categories">
+                  <div class="sidebar-category"><div class="sidebar-category-heading"><button type="button" class="sidebar-category-name" data-category="Bánh">Bánh</button><button class="sidebar-expand expanded" type="button" aria-label="Thu gọn danh mục" aria-expanded="true">−</button></div><div class="sidebar-subcategories"><button class="sidebar-subcategory" type="button" data-subcategory="Bánh tráng"><span class="subcategory-dot"></span>Bánh tráng</button><button class="sidebar-subcategory" type="button" data-subcategory="Bánh gạo"><span class="subcategory-dot"></span>Bánh gạo</button><button class="sidebar-subcategory" type="button" data-subcategory="Cơm cháy"><span class="subcategory-dot"></span>Cơm cháy</button><button class="sidebar-subcategory" type="button" data-subcategory="Cốm"><span class="subcategory-dot"></span>Cốm</button></div></div>
+                  <div class="sidebar-category"><div class="sidebar-category-heading"><button type="button" class="sidebar-category-name" data-category="Gạo, bột">Gạo, bột</button><button class="sidebar-expand expanded" type="button" aria-label="Thu gọn danh mục" aria-expanded="true">−</button></div><div class="sidebar-subcategories"><button class="sidebar-subcategory" type="button" data-subcategory="Gạo"><span class="subcategory-dot"></span>Gạo</button><button class="sidebar-subcategory" type="button" data-subcategory="Bột"><span class="subcategory-dot"></span>Bột</button></div></div>
+                  <div class="sidebar-category"><div class="sidebar-category-heading"><button type="button" class="sidebar-category-name" data-category="Đồ uống">Đồ uống</button><button class="sidebar-expand expanded" type="button" aria-label="Thu gọn danh mục" aria-expanded="true">−</button></div><div class="sidebar-subcategories"><button class="sidebar-subcategory" type="button" data-subcategory="Sữa"><span class="subcategory-dot"></span>Sữa</button><button class="sidebar-subcategory" type="button" data-subcategory="Trà"><span class="subcategory-dot"></span>Trà</button><button class="sidebar-subcategory" type="button" data-subcategory="Rượu"><span class="subcategory-dot"></span>Rượu</button></div></div>
+                  <div class="sidebar-category"><div class="sidebar-category-heading"><button type="button" class="sidebar-category-name" data-category="Mỹ phẩm">Mỹ phẩm</button><button class="sidebar-expand expanded" type="button" aria-label="Thu gọn danh mục" aria-expanded="true">−</button></div><div class="sidebar-subcategories"><button class="sidebar-subcategory" type="button" data-subcategory="Chăm sóc da mặt"><span class="subcategory-dot"></span>Chăm sóc da mặt</button><button class="sidebar-subcategory" type="button" data-subcategory="Chăm sóc cơ thể"><span class="subcategory-dot"></span>Chăm sóc cơ thể</button></div></div>
+                  <div class="sidebar-category"><div class="sidebar-category-heading"><button type="button" class="sidebar-category-name" data-category="Sản phẩm khác">Sản phẩm khác</button></div></div>
+                </div>
+                <div class="sidebar-divider"></div>
+                <div class="sidebar-price"><div class="sidebar-heading"><span class="sidebar-heading-icon">₫</span><h2>LỌC THEO GIÁ</h2></div><div class="price-options">
+                  <label class="price-option"><input type="radio" name="price-range" data-price-range="under-50000" /><span class="custom-radio"></span><span>Dưới 50.000đ</span></label>
+                  <label class="price-option"><input type="radio" name="price-range" data-price-range="50000-99000" /><span class="custom-radio"></span><span>50.000đ – 99.000đ</span></label>
+                  <label class="price-option"><input type="radio" name="price-range" data-price-range="100000-149000" /><span class="custom-radio"></span><span>100.000đ – 149.000đ</span></label>
+                  <label class="price-option"><input type="radio" name="price-range" data-price-range="150000-up" /><span class="custom-radio"></span><span>Từ 150.000đ</span></label>
+                </div><button type="button" class="clear-price" id="clear-price" hidden>Xóa lọc giá</button></div>
+                <button class="reset-filter" type="button" id="reset-products-filter"><span>↺</span> Xóa tất cả bộ lọc</button>
+              </aside>
+              <div class="products-content">
+                <div class="products-content-heading"><div><h2>Sản phẩm</h2><p>Có <strong id="product-count">0</strong> sản phẩm</p></div>
+                  <label class="products-search"><span aria-hidden="true">⌕</span><input id="products-search" type="search" placeholder="Tìm sản phẩm..." aria-label="Tìm sản phẩm" /></label>
+                  <label class="products-sort"><span class="sort-label">Sắp xếp:</span><select id="products-sort" aria-label="Sắp xếp sản phẩm"><option value="default">Sắp xếp mặc định</option><option value="price-asc">Giá: thấp đến cao</option><option value="price-desc">Giá: cao đến thấp</option><option value="name-asc">Tên: A đến Z</option></select></label>
+                </div>
+                <p class="empty-message" id="product-status" role="status" aria-live="polite">Đang tải sản phẩm...</p>
+                <div class="product-grid" id="product-grid" hidden></div>
+                <div class="products-empty" id="products-empty" hidden><span>⌕</span><h3>Không tìm thấy sản phẩm</h3><p>Bạn hãy thử thay đổi từ khóa hoặc bộ lọc sản phẩm.</p><button type="button" id="reset-empty-filter">Xóa bộ lọc</button></div>
+              </div>
+            </section>
+          </main>
+        </div>
+      </div>
+      <div id="footer-container"></div>
+    </div>
+    <div class="toast-message" id="site-toast" role="status" aria-live="polite" hidden></div>
+    <script src="./config.js"></script><script type="module" src="./src/js/main.js"></script>
+  </body>
+</html>

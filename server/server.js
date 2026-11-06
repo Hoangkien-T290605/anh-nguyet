@@ -400,6 +400,94 @@ function validateAddress(body) {
   return validateCoordinates(body);
 }
 
+const ORDER_STATUSES = new Set([
+  "pending_confirmation",
+  "confirmed",
+  "preparing",
+  "shipping",
+  "completed",
+  "cancelled",
+]);
+
+class OrderApiError extends Error {
+  constructor(status, message) {
+    super(message);
+    this.status = status;
+  }
+}
+
+function parsePositiveInteger(value, fieldName) {
+  const normalized = typeof value === "string" ? value.trim() : value;
+  if (
+    (typeof normalized !== "number" && !/^\d+$/.test(String(normalized))) ||
+    !Number.isSafeInteger(Number(normalized)) ||
+    Number(normalized) < 1
+  ) {
+    throw new OrderApiError(400, `${fieldName} không hợp lệ`);
+  }
+  return Number(normalized);
+}
+
+function toMoneyCents(value) {
+  const match = /^(\d+)(?:\.(\d{1,2}))?$/.exec(String(value));
+  if (!match) throw new Error("Giá sản phẩm trong database không hợp lệ");
+  return BigInt(match[1]) * 100n + BigInt((match[2] || "").padEnd(2, "0"));
+}
+
+function fromMoneyCents(cents) {
+  return `${cents / 100n}.${String(cents % 100n).padStart(2, "0")}`;
+}
+
+function formatOrderItem(row) {
+  return {
+    id: String(row.id),
+    product_id: row.product_id === null ? null : Number(row.product_id),
+    product_name: row.product_name,
+    product_category: row.product_category,
+    product_image: row.product_image,
+    unit_price: Number(row.unit_price),
+    quantity: Number(row.quantity),
+    line_total: Number(row.line_total),
+  };
+}
+
+function formatOrder(row, items = []) {
+  return {
+    id: String(row.id),
+    user_address_id: row.user_address_id === null ? null : Number(row.user_address_id),
+    recipient_name: row.recipient_name,
+    recipient_phone: row.recipient_phone,
+    shipping_address: row.shipping_address,
+    subtotal: Number(row.subtotal),
+    shipping_fee: row.shipping_fee === null ? null : Number(row.shipping_fee),
+    total_amount: Number(row.total_amount),
+    status: row.status,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    items,
+  };
+}
+
+async function loadOrderItems(connection, orderIds) {
+  if (!orderIds.length) return new Map();
+  const placeholders = orderIds.map(() => "?").join(",");
+  const [rows] = await connection.execute(
+    `SELECT id, order_id, product_id, product_name, product_category,
+            product_image, unit_price, quantity, line_total
+     FROM order_items
+     WHERE order_id IN (${placeholders})
+     ORDER BY id ASC`,
+    orderIds
+  );
+  const grouped = new Map();
+  for (const row of rows) {
+    const key = String(row.order_id);
+    if (!grouped.has(key)) grouped.set(key, []);
+    grouped.get(key).push(formatOrderItem(row));
+  }
+  return grouped;
+}
+
 // Đồng bộ địa chỉ mặc định vào hồ sơ tài khoản
 async function syncDefaultAddressToProfile(connection, userId, address) {
   await connection.execute(
@@ -1581,6 +1669,268 @@ app.delete(
 // =========================
 // API SẢN PHẨM
 // =========================
+
+// =========================
+// API ĐƠN HÀNG
+// =========================
+
+app.post("/api/orders", authenticateToken, async (req, res) => {
+  let connection;
+  let transactionStarted = false;
+
+  try {
+    const body = req.body;
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      throw new OrderApiError(400, "Dữ liệu đơn hàng không hợp lệ");
+    }
+
+    const addressId = parsePositiveInteger(body.address_id, "Địa chỉ nhận hàng");
+    if (!Array.isArray(body.items) || body.items.length < 1 || body.items.length > 100) {
+      throw new OrderApiError(400, "Đơn hàng phải có từ 1 đến 100 sản phẩm");
+    }
+
+    const requestedItems = body.items.map((item, index) => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) {
+        throw new OrderApiError(400, `Sản phẩm thứ ${index + 1} không hợp lệ`);
+      }
+      const productId = parsePositiveInteger(item.product_id, `Mã sản phẩm thứ ${index + 1}`);
+      const quantity = parsePositiveInteger(item.quantity, `Số lượng sản phẩm thứ ${index + 1}`);
+      if (quantity > 1000000) {
+        throw new OrderApiError(400, "Số lượng mỗi sản phẩm vượt giới hạn cho phép");
+      }
+      return { productId, quantity };
+    });
+
+    const requestedIds = requestedItems.map((item) => item.productId);
+    if (new Set(requestedIds).size !== requestedIds.length) {
+      throw new OrderApiError(400, "Mỗi sản phẩm chỉ được xuất hiện một lần trong đơn hàng");
+    }
+
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+    transactionStarted = true;
+
+    const [addressRows] = await connection.execute(
+      `SELECT id, recipient_name, phone, address
+       FROM user_addresses
+       WHERE id = ? AND user_id = ?
+       FOR UPDATE`,
+      [addressId, req.user.id]
+    );
+    if (!addressRows.length) {
+      throw new OrderApiError(400, "Địa chỉ nhận hàng không hợp lệ");
+    }
+    const address = addressRows[0];
+
+    const productsById = new Map();
+    for (const productId of [...requestedIds].sort((a, b) => a - b)) {
+      const [productRows] = await connection.execute(
+        `SELECT id, name, category, image, price, stock, active
+         FROM products
+         WHERE id = ?
+         FOR UPDATE`,
+        [productId]
+      );
+      if (!productRows.length) {
+        throw new OrderApiError(404, `Không tìm thấy sản phẩm mã ${productId}`);
+      }
+      const product = productRows[0];
+      if (!product.active) {
+        throw new OrderApiError(409, `Sản phẩm “${product.name}” hiện không kinh doanh`);
+      }
+      const requested = requestedItems.find((item) => item.productId === productId);
+      if (Number(product.stock) < requested.quantity) {
+        throw new OrderApiError(409, `Sản phẩm “${product.name}” không đủ tồn kho`);
+      }
+      productsById.set(productId, product);
+    }
+
+    const orderItems = requestedItems.map(({ productId, quantity }) => {
+      const product = productsById.get(productId);
+      const unitPriceCents = toMoneyCents(product.price);
+      const lineTotalCents = unitPriceCents * BigInt(quantity);
+      return {
+        productId,
+        product,
+        quantity,
+        unitPriceCents,
+        lineTotalCents,
+      };
+    });
+
+    const subtotalCents = orderItems.reduce((sum, item) => sum + item.lineTotalCents, 0n);
+    const maxOrderCents = 99999999999999n; // DECIMAL(14,2)
+    if (subtotalCents > maxOrderCents) {
+      throw new OrderApiError(400, "Tổng tiền đơn hàng vượt giới hạn cho phép");
+    }
+
+    for (const item of orderItems) {
+      const [stockResult] = await connection.execute(
+        `UPDATE products
+         SET stock = stock - ?
+         WHERE id = ? AND active = 1 AND stock >= ?`,
+        [item.quantity, item.productId, item.quantity]
+      );
+      if (stockResult.affectedRows !== 1) {
+        throw new OrderApiError(409, `Tồn kho sản phẩm “${item.product.name}” vừa thay đổi`);
+      }
+    }
+
+    const subtotal = fromMoneyCents(subtotalCents);
+    const [orderResult] = await connection.execute(
+      `INSERT INTO orders
+        (customer_id, user_address_id, recipient_name, recipient_phone,
+         shipping_address, subtotal, shipping_fee, total_amount, status)
+       VALUES (?, ?, ?, ?, ?, ?, NULL, ?, 'pending_confirmation')`,
+      [
+        req.user.id,
+        address.id,
+        address.recipient_name,
+        address.phone,
+        address.address,
+        subtotal,
+        subtotal,
+      ]
+    );
+
+    const orderId = orderResult.insertId;
+    for (const item of orderItems) {
+      await connection.execute(
+        `INSERT INTO order_items
+          (order_id, product_id, product_name, product_category, product_image,
+           unit_price, quantity, line_total)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          orderId,
+          item.productId,
+          item.product.name,
+          item.product.category,
+          item.product.image || null,
+          fromMoneyCents(item.unitPriceCents),
+          item.quantity,
+          fromMoneyCents(item.lineTotalCents),
+        ]
+      );
+    }
+
+    await connection.commit();
+    transactionStarted = false;
+
+    const createdAt = new Date();
+    res.status(201).json({
+      success: true,
+      message: "Đơn hàng đã được tạo và đang chờ xác nhận",
+      data: {
+        id: String(orderId),
+        user_address_id: Number(address.id),
+        recipient_name: address.recipient_name,
+        recipient_phone: address.phone,
+        shipping_address: address.address,
+        subtotal: Number(subtotal),
+        shipping_fee: null,
+        total_amount: Number(subtotal),
+        status: "pending_confirmation",
+        created_at: createdAt,
+        updated_at: createdAt,
+        items: orderItems.map((item) => ({
+          product_id: item.productId,
+          product_name: item.product.name,
+          product_category: item.product.category,
+          product_image: item.product.image || null,
+          unit_price: Number(fromMoneyCents(item.unitPriceCents)),
+          quantity: item.quantity,
+          line_total: Number(fromMoneyCents(item.lineTotalCents)),
+        })),
+      },
+    });
+  } catch (error) {
+    if (transactionStarted && connection) {
+      try { await connection.rollback(); } catch { /* kết nối có thể đã đóng */ }
+    }
+    if (error instanceof OrderApiError) {
+      return res.status(error.status).json({ success: false, message: error.message });
+    }
+    console.error("Lỗi tạo đơn hàng:", error.code || "UNKNOWN");
+    return res.status(500).json({ success: false, message: "Không thể tạo đơn hàng" });
+  } finally {
+    connection?.release();
+  }
+});
+
+app.get("/api/orders", authenticateToken, async (req, res) => {
+  try {
+    const page = req.query.page === undefined ? 1 : parsePositiveInteger(req.query.page, "Số trang");
+    const limit = req.query.limit === undefined ? 20 : parsePositiveInteger(req.query.limit, "Số lượng mỗi trang");
+    if (limit > 50) throw new OrderApiError(400, "Số đơn hàng mỗi trang tối đa là 50");
+
+    const status = req.query.status;
+    if (status !== undefined && !ORDER_STATUSES.has(status)) {
+      throw new OrderApiError(400, "Trạng thái đơn hàng không hợp lệ");
+    }
+
+    const whereStatus = status ? " AND status = ?" : "";
+    const values = status ? [req.user.id, status] : [req.user.id];
+    const [countRows] = await pool.execute(
+      `SELECT COUNT(*) AS total FROM orders WHERE customer_id = ?${whereStatus}`,
+      values
+    );
+    const offset = (page - 1) * limit;
+    if (!Number.isSafeInteger(offset)) throw new OrderApiError(400, "Số trang quá lớn");
+    const [orders] = await pool.execute(
+      `SELECT id, user_address_id, recipient_name, recipient_phone, shipping_address,
+              subtotal, shipping_fee, total_amount, status, created_at, updated_at
+       FROM orders
+       WHERE customer_id = ?${whereStatus}
+       ORDER BY created_at DESC, id DESC
+       LIMIT ? OFFSET ?`,
+      [...values, limit, offset]
+    );
+    const itemsByOrder = await loadOrderItems(pool, orders.map((order) => order.id));
+
+    res.json({
+      success: true,
+      count: Number(countRows[0].total),
+      page,
+      limit,
+      data: orders.map((order) => formatOrder(order, itemsByOrder.get(String(order.id)) || [])),
+    });
+  } catch (error) {
+    if (error instanceof OrderApiError) {
+      return res.status(error.status).json({ success: false, message: error.message });
+    }
+    console.error("Lỗi lấy danh sách đơn hàng:", error.code || "UNKNOWN");
+    return res.status(500).json({ success: false, message: "Không thể lấy danh sách đơn hàng" });
+  }
+});
+
+app.get("/api/orders/:id", authenticateToken, async (req, res) => {
+  try {
+    const orderId = parsePositiveInteger(req.params.id, "Mã đơn hàng");
+    const [orders] = await pool.execute(
+      `SELECT id, user_address_id, recipient_name, recipient_phone, shipping_address,
+              subtotal, shipping_fee, total_amount, status, created_at, updated_at
+       FROM orders
+       WHERE id = ? AND customer_id = ?
+       LIMIT 1`,
+      [orderId, req.user.id]
+    );
+    if (!orders.length) {
+      return res.status(404).json({ success: false, message: "Không tìm thấy đơn hàng" });
+    }
+
+    const itemsByOrder = await loadOrderItems(pool, [orders[0].id]);
+    res.json({
+      success: true,
+      data: formatOrder(orders[0], itemsByOrder.get(String(orders[0].id)) || []),
+    });
+  } catch (error) {
+    if (error instanceof OrderApiError) {
+      return res.status(error.status).json({ success: false, message: error.message });
+    }
+    console.error("Lỗi lấy chi tiết đơn hàng:", error.code || "UNKNOWN");
+    res.status(500).json({ success: false, message: "Không thể lấy chi tiết đơn hàng" });
+  }
+});
 
 // Lấy danh sách sản phẩm
 app.get("/api/products", async (req, res) => {

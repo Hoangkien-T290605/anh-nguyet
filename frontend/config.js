@@ -1,0 +1,1 @@
+window.ANH_NGUYET_CONFIG = { apiBaseUrl: "http://127.0.0.1:5011" };
