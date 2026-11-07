@@ -1,3 +1,4 @@
+<!-- Trang chi tiết sản phẩm; dữ liệu được tải theo mã trên URL. -->
 <!doctype html>
 <html lang="vi">
   <head>
@@ -7,21 +8,39 @@
     <meta name="theme-color" content="#7041a6" />
     <title>Chi tiết sản phẩm | Ánh Nguyệt</title>
   </head>
-  <body data-page="product">
+  <body data-page="product-detail">
     <div class="site-shell">
       <div id="site-header"></div>
       <div id="page-content">
         <div class="product-detail-page">
-          <main class="product-detail-main">
-            <div class="detail-breadcrumb"><a href="index.html">TRANG CHỦ</a><span>/</span><a href="products.html">SẢN PHẨM</a><span>/</span><span>CHI TIẾT</span></div>
-            <p id="product-detail-status" class="detail-message" role="status" aria-live="polite">Đang tải thông tin sản phẩm...</p>
+          <main class="product-detail-primary">
+            <div class="detail-breadcrumb">
+              <a href="index.html">TRANG CHỦ</a><span>/</span
+              ><a href="products.html">SẢN PHẨM</a><span>/</span
+              ><span>CHI TIẾT</span>
+            </div>
+            <p
+              id="product-detail-status"
+              class="detail-alert"
+              role="status"
+              aria-live="polite"
+            >
+              Đang tải thông tin sản phẩm...
+            </p>
             <div id="product-detail" hidden></div>
           </main>
         </div>
       </div>
       <div id="footer-container"></div>
     </div>
-    <div class="toast-message" id="site-toast" role="status" aria-live="polite" hidden></div>
-    <script src="./config.js"></script><script type="module" src="./src/js/main.js"></script>
+    <div
+      class="toast-notification"
+      id="page-toast-notification"
+      role="status"
+      aria-live="polite"
+      hidden
+    ></div>
+    <script src="./config.js"></script>
+    <script type="module" src="./src/js/main.js"></script>
   </body>
 </html>

@@ -1,4 +1,4 @@
-﻿# Ánh Nguyệt
+# Ánh Nguyệt
 
 Website dùng Frontend tĩnh HTML5, Tailwind CSS đã biên dịch và JavaScript ES Modules; Backend Node.js + Express.js; MySQL 8.4.
 

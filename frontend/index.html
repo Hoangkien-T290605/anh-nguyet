@@ -1,3 +1,4 @@
+<!-- Trang chủ của website, dùng các vùng gắn đầu trang/chân trang và nội dung động. -->
 <!doctype html>
 <html lang="vi">
   <head>
@@ -15,16 +16,20 @@
     <div class="site-shell">
       <div id="site-header"></div>
       <div id="page-content">
-        <main id="trang-chu" class="mx-auto w-full">
+        <main id="home" class="mx-auto w-full">
           <section class="hero" aria-label="Banner Ánh Nguyệt">
-            <img class="hero-image" data-hero alt="Tinh hoa từ đất, sáng bừng vị ngon" />
-            <a class="hero-button" href="#danh-muc">
+            <img
+              class="hero-image"
+              data-hero
+              alt="Tinh hoa từ đất, sáng bừng vị ngon"
+            />
+            <a class="hero-button" href="#category">
               KHÁM PHÁ NGAY <span aria-hidden="true">→</span>
             </a>
           </section>
 
-          <section class="content-section" id="danh-muc">
-            <div class="section-heading">
+          <section class="content-section" id="category">
+            <div class="section-header">
               <div class="heading-title">
                 <img class="heading-decoration" data-decoration alt="" />
                 <div>
@@ -36,11 +41,15 @@
                 Xem tất cả danh mục <span>→</span>
               </a>
             </div>
-            <div class="category-grid" id="category-grid" aria-label="Danh mục sản phẩm"></div>
+            <div
+              class="category-grid"
+              id="category-grid"
+              aria-label="Danh mục sản phẩm"
+            ></div>
           </section>
 
-          <section class="content-section products-section" id="san-pham">
-            <div class="section-heading">
+          <section class="content-section products-page-section" id="product">
+            <div class="section-header">
               <div class="heading-title">
                 <img class="heading-decoration" data-decoration alt="" />
                 <div>
@@ -52,7 +61,12 @@
                 Xem tất cả <span>→</span>
               </a>
             </div>
-            <p class="empty-message" id="product-status" role="status" aria-live="polite">
+            <p
+              class="loading-message"
+              id="product-status"
+              role="status"
+              aria-live="polite"
+            >
               Đang tải sản phẩm...
             </p>
             <div class="product-grid" id="product-grid" hidden></div>
@@ -61,7 +75,14 @@
       </div>
       <div id="footer-container"></div>
     </div>
-    <div class="toast-message" id="site-toast" role="status" aria-live="polite" hidden></div>
-    <script src="./config.js"></script><script type="module" src="./src/js/main.js"></script>
+    <div
+      class="toast-notification"
+      id="page-toast-notification"
+      role="status"
+      aria-live="polite"
+      hidden
+    ></div>
+    <script src="./config.js"></script>
+    <script type="module" src="./src/js/main.js"></script>
   </body>
 </html>

@@ -26,3 +26,4 @@ server/uploads/
 
 # Database backups (contain private user data)
 database/anh_nguyet_full_backup.sql
+/backups/

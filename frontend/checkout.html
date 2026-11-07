@@ -1,3 +1,4 @@
+<!-- Trang xác nhận địa chỉ và gửi yêu cầu đặt hàng. -->
 <!doctype html>
 <html lang="vi">
   <head>
@@ -12,23 +13,32 @@
       <div id="site-header"></div>
       <div id="page-content">
         <main class="checkout-page">
-          <div class="checkout-main">
+          <div class="checkout-primary">
             <nav class="cart-breadcrumb" aria-label="Đường dẫn">
-              <a href="index.html">TRANG CHỦ</a><span>/</span><a href="cart.html">GIỎ HÀNG</a><span>/</span><span>THANH TOÁN</span>
+              <a href="index.html">TRANG CHỦ</a><span>/</span
+              ><a href="cart.html">GIỎ HÀNG</a><span>/</span
+              ><span>THANH TOÁN</span>
             </nav>
-            <section class="cart-title checkout-title">
+            <section class="cart-heading checkout-heading">
               <p>ÁNH NGUYỆT COLLECTION</p>
               <h1>THANH TOÁN</h1>
-              <span>Kiểm tra thông tin nhận hàng và sản phẩm trước khi xác nhận.</span>
+              <span
+                >Kiểm tra thông tin nhận hàng và sản phẩm trước khi xác
+                nhận.</span
+              >
             </section>
-            <div id="checkout-root" aria-live="polite">
-              <div class="checkout-loading"><span class="account-loading-spinner"></span><p>Đang tải thông tin thanh toán...</p></div>
+            <div id="checkout-goc" aria-live="polite">
+              <div class="checkout-loading">
+                <span class="account-loading-spinner"></span>
+                <p>Đang tải thông tin thanh toán...</p>
+              </div>
             </div>
           </div>
         </main>
       </div>
       <div id="footer-container"></div>
     </div>
-    <script src="./config.js"></script><script type="module" src="./src/js/main.js"></script>
+    <script src="./config.js"></script>
+    <script type="module" src="./src/js/main.js"></script>
   </body>
 </html>

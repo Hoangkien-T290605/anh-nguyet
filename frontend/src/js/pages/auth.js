@@ -1,124 +1,169 @@
+// Trang đăng nhập và đăng ký gửi dữ liệu đến các API xác thực hiện có.
 import { apiRequest } from "../services/api.js";
 
-const logoUrl = "./assets/logo-anh-nguyet.png";
-
+const LOGO_PATH = "./assets/logo-anh-nguyet.png";
 const AUTH_STORAGE_KEY = "anh-nguyet-auth";
 
-function showError(element, message) {
-  element.textContent = message;
-  element.hidden = !message;
+// Hiển thị hoặc ẩn thông báo lỗi của biểu mẫu.
+function showError(element, content) {
+  element.textContent = content;
+  element.hidden = !content;
 }
 
+// Gắn luồng gửi biểu mẫu theo chế độ đăng nhập hoặc đăng ký.
 export function mountAuth(mode) {
-  const isRegister = mode === "register";
-  const form = document.getElementById("auth-form");
-  const errorNode = document.getElementById("auth-error");
-  const successNode = document.getElementById("auth-success");
-  const submitButton = document.getElementById("auth-submit");
-  const logo = document.querySelector("[data-auth-logo]");
-  const password = form.elements.password;
-  const confirmPassword = isRegister ? form.elements.confirmPassword : null;
+  const laDangKy = mode === "register";
+  const bieuMau = document.getElementById("auth-form");
+  const thongBaoLoi = document.getElementById("auth-error");
+  const thongBaoThanhCong = document.getElementById("auth-success");
+  const nutGui = document.getElementById("auth-send");
+  const anhLogo = document.querySelector("[data-auth-logo]");
+  const oMatKhau = bieuMau.elements.password;
+  const oXacNhanMatKhau = laDangKy
+    ? bieuMau.elements["confirm-password"]
+    : null;
 
-  logo.src = logoUrl;
+  anhLogo.src = LOGO_PATH;
 
-  if (!isRegister && new URLSearchParams(window.location.search).get("registered") === "1") {
-    successNode.textContent = "Đăng ký thành công. Vui lòng đăng nhập.";
-    successNode.hidden = false;
+  if (
+    !laDangKy &&
+    new URLSearchParams(window.location.search).get("registered") === "1"
+  ) {
+    thongBaoThanhCong.textContent = "Đăng ký thành công. Vui lòng đăng nhập.";
+    thongBaoThanhCong.hidden = false;
   }
-  if (!isRegister && new URLSearchParams(window.location.search).get("session") === "expired") {
-    showError(errorNode, "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.");
+  if (
+    !laDangKy &&
+    new URLSearchParams(window.location.search).get("session") === "expired"
+  ) {
+    showError(
+      thongBaoLoi,
+      "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.",
+    );
   }
 
-  form.addEventListener("input", () => showError(errorNode, ""));
+  bieuMau.addEventListener("input", () => showError(thongBaoLoi, ""));
 
-  document.querySelector("[data-password-toggle]").addEventListener("click", (event) => {
-    const button = event.currentTarget;
-    const show = password.type === "password";
-    password.type = show ? "text" : "password";
-    if (confirmPassword) confirmPassword.type = show ? "text" : "password";
-    button.textContent = show ? "Ẩn" : "Hiện";
-    button.setAttribute("aria-label", show ? "Ẩn mật khẩu" : "Hiện mật khẩu");
-    button.setAttribute("aria-pressed", String(show));
-  });
+  document
+    .querySelector("[data-password-toggle]")
+    .addEventListener("click", (suKien) => {
+      const nutAnHien = suKien.currentTarget;
+      const dangHienMatKhau = oMatKhau.type === "password";
+      oMatKhau.type = dangHienMatKhau ? "text" : "password";
+      if (oXacNhanMatKhau) {
+        oXacNhanMatKhau.type = dangHienMatKhau ? "text" : "password";
+      }
+      nutAnHien.textContent = dangHienMatKhau ? "Ẩn" : "Hiện";
+      nutAnHien.setAttribute(
+        "aria-label",
+        dangHienMatKhau ? "Ẩn mật khẩu" : "Hiện mật khẩu",
+      );
+      nutAnHien.setAttribute("aria-pressed", String(dangHienMatKhau));
+    });
 
-  form.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    showError(errorNode, "");
+  // Kiểm tra dữ liệu ở trình duyệt trước khi gửi đến API phù hợp.
+  bieuMau.addEventListener("submit", async (suKien) => {
+    suKien.preventDefault();
+    showError(thongBaoLoi, "");
 
-    const values = Object.fromEntries(new FormData(form).entries());
-    const fullName = String(values.full_name || "").trim();
-    const email = String(values.email || "").trim();
+    const duLieuBieuMau = Object.fromEntries(
+      new FormData(bieuMau).entries(),
+    );
+    const hoTen = String(duLieuBieuMau.full_name || "").trim();
+    const email = String(duLieuBieuMau.email || "").trim();
 
-    if (!email || !form.elements.email.validity.valid) {
-      showError(errorNode, "Vui lòng nhập địa chỉ email hợp lệ.");
-      form.elements.email.focus();
+    if (!email || !bieuMau.elements.email.validity.valid) {
+      showError(thongBaoLoi, "Vui lòng nhập địa chỉ email hợp lệ.");
+      bieuMau.elements.email.focus();
       return;
     }
-    if (isRegister && (!fullName || fullName.length > 100)) {
-      showError(errorNode, "Vui lòng nhập họ tên không quá 100 ký tự.");
-      form.elements.full_name.focus();
+    if (laDangKy && (!hoTen || hoTen.length > 100)) {
+      showError(thongBaoLoi, "Vui lòng nhập họ tên không quá 100 ký tự.");
+      bieuMau.elements.full_name.focus();
       return;
     }
-    if (isRegister && String(values.phone || "").length > 20) {
-      showError(errorNode, "Số điện thoại không được vượt quá 20 ký tự.");
-      form.elements.phone.focus();
+    if (laDangKy && String(duLieuBieuMau.phone || "").length > 20) {
+      showError(thongBaoLoi, "Số điện thoại không được vượt quá 20 ký tự.");
+      bieuMau.elements.phone.focus();
       return;
     }
-    if (password.value.length < 6) {
-      showError(errorNode, "Mật khẩu phải có ít nhất 6 ký tự.");
-      password.focus();
+    if (oMatKhau.value.length < 6) {
+      showError(thongBaoLoi, "Mật khẩu phải có ít nhất 6 ký tự.");
+      oMatKhau.focus();
       return;
     }
-    if (password.value.length > 72) {
-      showError(errorNode, "Mật khẩu không được vượt quá 72 ký tự.");
-      password.focus();
+    if (oMatKhau.value.length > 72) {
+      showError(thongBaoLoi, "Mật khẩu không được vượt quá 72 ký tự.");
+      oMatKhau.focus();
       return;
     }
-    if (isRegister && password.value !== confirmPassword.value) {
-      showError(errorNode, "Mật khẩu xác nhận không khớp.");
-      confirmPassword.focus();
+    if (laDangKy && oMatKhau.value !== oXacNhanMatKhau.value) {
+      showError(thongBaoLoi, "Mật khẩu xác nhận không khớp.");
+      oXacNhanMatKhau.focus();
       return;
     }
 
-    const payload = isRegister
+    // Khóa JSON gửi Backend được giữ đúng hợp đồng API hiện tại.
+    const duLieuGui = laDangKy
       ? {
-          full_name: fullName,
+          full_name: hoTen,
           email,
-          password: password.value,
-          phone: String(values.phone || "").trim(),
-          address: String(values.address || "").trim(),
+          password: oMatKhau.value,
+          phone: String(duLieuBieuMau.phone || "").trim(),
+          address: String(duLieuBieuMau.address || "").trim(),
         }
-      : { email, password: password.value };
+      : { email, password: oMatKhau.value };
 
-    submitButton.disabled = true;
-    submitButton.textContent = "Đang xử lý...";
-    form.setAttribute("aria-busy", "true");
+    nutGui.disabled = true;
+    nutGui.textContent = "Đang xử lý...";
+    bieuMau.setAttribute("aria-busy", "true");
 
     try {
-      const result = await apiRequest(`/auth/${isRegister ? "register" : "login"}`, {
-        method: "POST",
-        body: JSON.stringify(payload),
-      });
+      const ketQua = await apiRequest(
+        `/auth/${laDangKy ? "register" : "login"}`,
+        {
+          method: "POST",
+          body: JSON.stringify(duLieuGui),
+        },
+      );
 
-      if (result.token && result.user) {
-        localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ token: result.token, user: result.user }));
-        window.dispatchEvent(new CustomEvent("anh-nguyet-auth-updated", { detail: { user: result.user } }));
-        window.location.assign("index.html");
+      if (ketQua.token && ketQua.user) {
+        localStorage.setItem(
+          AUTH_STORAGE_KEY,
+          JSON.stringify({ token: ketQua.token, user: ketQua.user }),
+        );
+        window.dispatchEvent(
+          new CustomEvent("anh-nguyet-xac-thuc-cap-nhat", {
+            detail: { user: ketQua.user },
+          }),
+        );
+        const duongDanQuayLai =
+          new URLSearchParams(window.location.search).get("returnTo") || "";
+        const duongDanAnToan =
+          /^account\.html\?tab=(profile|addresses|orders)$/.test(
+            duongDanQuayLai,
+          ) ||
+          ["checkout.html", "admin-orders.html"].includes(
+            duongDanQuayLai,
+          );
+        window.location.assign(
+          duongDanAnToan ? duongDanQuayLai : "index.html",
+        );
         return;
       }
 
-      if (isRegister) {
+      if (laDangKy) {
         window.location.assign("login.html?registered=1");
         return;
       }
 
       throw new Error("Máy chủ không trả thông tin phiên đăng nhập hợp lệ.");
-    } catch (error) {
-      showError(errorNode, error.message || "Đã xảy ra lỗi. Vui lòng thử lại.");
+    } catch (loi) {
+      showError(thongBaoLoi, loi.message || "Đã xảy ra lỗi. Vui lòng thử lại.");
     } finally {
-      submitButton.disabled = false;
-      submitButton.textContent = isRegister ? "Đăng ký" : "Đăng nhập";
-      form.removeAttribute("aria-busy");
+      nutGui.disabled = false;
+      nutGui.textContent = laDangKy ? "Đăng ký" : "Đăng nhập";
+      bieuMau.removeAttribute("aria-busy");
     }
   });
 }

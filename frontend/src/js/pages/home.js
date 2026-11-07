@@ -1,40 +1,52 @@
+// Trang chủ tải danh mục và sản phẩm nổi bật từ Backend.
 import { apiRequest, getProductImageUrl } from "../services/api.js";
 import { addToCart } from "../services/cart.js";
 
-const heroUrl = "./assets/header-panel.png";
-const decorationUrl = "./assets/icon-trang-tri.png";
-const iconBanh = "./assets/icon-banh.png";
-const iconBotGao = "./assets/icon-bot-gao.png";
-const iconDoUong = "./assets/icon-do-uong.png";
-const iconMyPham = "./assets/icon-my-pham.png";
-const iconHopQua = "./assets/icon-hop-qua.png";
-const iconTatCa = "./assets/icon-tat-ca.png";
+const heroImageUrl = "./assets/header-panel.png";
+const decorationUrl = "./assets/icon-decoration.png";
+const breadIconUrl = "./assets/icon-banh.png";
+const riceFlourIconUrl = "./assets/icon-rice-flour.png";
+const drinksIconUrl = "./assets/icon-drinks.png";
+const cosmeticsIconUrl = "./assets/icon-cosmetics.png";
+const giftsIconUrl = "./assets/icon-gifts.png";
+const allIconUrl = "./assets/icon-all.png";
 
 const categories = [
-  { name: "Bánh", icon: iconBanh },
-  { name: "Gạo, bột", icon: iconBotGao },
-  { name: "Đồ uống", icon: iconDoUong },
-  { name: "Mỹ phẩm", icon: iconMyPham },
-  { name: "Sản phẩm khác", icon: iconHopQua },
-  { name: "Tất cả", icon: iconTatCa },
+  { name: "Bánh", icon: breadIconUrl },
+  { name: "Gạo, bột", icon: riceFlourIconUrl },
+  { name: "Đồ uống", icon: drinksIconUrl },
+  { name: "Mỹ phẩm", icon: cosmeticsIconUrl },
+  { name: "Sản phẩm khác", icon: giftsIconUrl },
+  { name: "Tất cả", icon: allIconUrl },
 ];
 
 let allProducts = [];
-let activeCategory = "Tất cả";
-let activeSearch = "";
+let selectedCategory = "Tất cả";
+let searchTerm = "";
 let toastTimer;
 const favoriteIds = new Set();
 
+// Mã hóa dữ liệu hiển thị để giữ an toàn cấu trúc HTML.
 function escapeHTML(value = "") {
-  return String(value).replace(/[&<>"']/g, (character) => ({
-    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
-  })[character]);
+  return String(value).replace(
+    /[&<>"']/g,
+    (character) =>
+      ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;",
+      })[character],
+  );
 }
 
+// Hiển thị giá theo định dạng tiền tệ Việt Nam.
 function formatPrice(value) {
   return `${Number(value || 0).toLocaleString("vi-VN")}đ`;
 }
 
+// Chọn biểu tượng theo nhóm sản phẩm.
 function categorySymbol(category) {
   if (category === "Gạo, bột") return "▤";
   if (category === "Đồ uống") return "♧";
@@ -43,31 +55,40 @@ function categorySymbol(category) {
   return "❋";
 }
 
+// Hiển thị thông báo ngắn sau thao tác của khách hàng.
 function showToast(message) {
-  const toast = document.getElementById("site-toast");
+  const toast = document.getElementById("page-toast-notification");
   toast.textContent = message;
   toast.hidden = false;
   window.clearTimeout(toastTimer);
-  toastTimer = window.setTimeout(() => { toast.hidden = true; }, 2500);
+  toastTimer = window.setTimeout(() => {
+    toast.hidden = true;
+  }, 2500);
 }
 
+// Dựng các thẻ danh mục từ danh sách cấu hình giao diện.
 function renderCategories() {
   const grid = document.getElementById("category-grid");
-  grid.innerHTML = categories.map((category) => `
-    <button class="category-card ${activeCategory === category.name ? "selected" : ""}" type="button" data-category="${escapeHTML(category.name)}" aria-pressed="${activeCategory === category.name}">
+  grid.innerHTML = categories
+    .map(
+      (category) => `
+    <button class="category-card ${selectedCategory === category.name ? "selected" : ""}" type="button" data-category="${escapeHTML(category.name)}" aria-pressed="${selectedCategory === category.name}">
       <img class="category-icon" src="${category.icon}" alt="" />
       <span class="category-name">${escapeHTML(category.name)}</span>
-    </button>`).join("");
+    </button>`,
+    )
+    .join("");
 }
 
-function productCard(product, index) {
+// Tạo thẻ sản phẩm trang chủ theo cấu trúc dùng chung.
+function createProductCard(product, index) {
   const id = String(product._id ?? product.id ?? "");
   const image = getProductImageUrl(product.image);
   const available = Number(product.stock) > 0;
   return `
     <article class="product-card" tabindex="0" role="link" data-product="${escapeHTML(id)}" aria-label="Xem chi tiết ${escapeHTML(product.name)}">
-      <div class="product-image product-image-${index % 5}">
-        ${image ? `<img class="product-photo" src="${escapeHTML(image)}" alt="${escapeHTML(product.name)}" loading="lazy" data-product-image />` : ""}
+      <div class="product-image-wrapper product-image-wrapper-${index % 5}">
+        ${image ? `<img class="product-image" src="${escapeHTML(image)}" alt="${escapeHTML(product.name)}" loading="lazy" data-product-image />` : ""}
         <span class="product-placeholder" aria-hidden="true" ${image ? "hidden" : ""}>${categorySymbol(product.category)}</span>
         <span class="product-brand">ÁNH NGUYỆT</span>
         <button class="favorite-button ${favoriteIds.has(id) ? "is-favorite" : ""}" type="button" data-favorite="${escapeHTML(id)}" aria-label="${favoriteIds.has(id) ? "Bỏ yêu thích" : "Thêm vào yêu thích"}" aria-pressed="${favoriteIds.has(id)}">${favoriteIds.has(id) ? "♥" : "♡"}</button>
@@ -82,45 +103,59 @@ function productCard(product, index) {
     </article>`;
 }
 
+// Dựng danh sách sản phẩm sau khi dữ liệu tải về.
 function renderProducts() {
   const grid = document.getElementById("product-grid");
   const status = document.getElementById("product-status");
-  const query = activeSearch.trim().toLocaleLowerCase("vi");
+  const query = searchTerm.trim().toLocaleLowerCase("vi");
   const visible = allProducts.filter((product) => {
     const name = String(product.name || "").toLocaleLowerCase("vi");
-    return (activeCategory === "Tất cả" || product.category === activeCategory)
-      && name.includes(query)
-      && product.active !== false
-      && product.active !== 0;
+    return (
+      (selectedCategory === "Tất cả" || product.category === selectedCategory) &&
+      name.includes(query) &&
+      product.active !== false &&
+      product.active !== 0
+    );
   });
 
   if (!visible.length) {
     grid.hidden = true;
     status.hidden = false;
-    status.textContent = allProducts.length ? "Không tìm thấy sản phẩm phù hợp." : "Chưa có sản phẩm để hiển thị.";
+    status.textContent = allProducts.length
+      ? "Không tìm thấy sản phẩm phù hợp."
+      : "Chưa có sản phẩm để hiển thị.";
     return;
   }
 
   status.hidden = true;
   grid.hidden = false;
-  grid.innerHTML = visible.map(productCard).join("");
+  grid.innerHTML = visible.map(createProductCard).join("");
 
   grid.querySelectorAll("[data-product-image]").forEach((image) => {
-    image.addEventListener("error", () => {
-      image.hidden = true;
-      const placeholder = image.parentElement.querySelector(".product-placeholder");
-      if (placeholder) placeholder.hidden = false;
-    }, { once: true });
+    image.addEventListener(
+      "error",
+      () => {
+        image.hidden = true;
+        const placeholder = image.parentElement.querySelector(
+          ".product-placeholder",
+        );
+        if (placeholder) placeholder.hidden = false;
+      },
+      { once: true },
+    );
   });
 }
 
+// Gắn thao tác mở chi tiết, yêu thích và thêm vào giỏ hàng.
 function bindProductActions() {
   const grid = document.getElementById("product-grid");
   grid.addEventListener("click", (event) => {
     const addButton = event.target.closest("[data-add-cart]");
     if (addButton) {
       event.stopPropagation();
-      const product = allProducts.find((item) => String(item._id ?? item.id) === addButton.dataset.addCart);
+      const product = allProducts.find(
+        (item) => String(item._id ?? item.id) === addButton.dataset.addCart,
+      );
       if (!product) return;
       try {
         addToCart(product);
@@ -154,7 +189,8 @@ function bindProductActions() {
     }
 
     const card = event.target.closest("[data-product]");
-    if (card) window.location.href = `product-detail.html?id=${encodeURIComponent(card.dataset.product)}`;
+    if (card)
+      window.location.href = `product-detail.html?id=${encodeURIComponent(card.dataset.product)}`;
   });
 
   grid.addEventListener("keydown", (event) => {
@@ -167,28 +203,39 @@ function bindProductActions() {
   });
 }
 
+// Tải dữ liệu trang chủ và khởi tạo các khu vực tương tác.
 export async function mountHome() {
-  document.querySelector("[data-hero]").src = heroUrl;
-  document.querySelectorAll("[data-decoration]").forEach((image) => { image.src = decorationUrl; });
+  document.querySelector("[data-hero]").src = heroImageUrl;
+  document.querySelectorAll("[data-decoration]").forEach((image) => {
+    image.src = decorationUrl;
+  });
   renderCategories();
   bindProductActions();
 
-  document.getElementById("category-grid").addEventListener("click", (event) => {
-    const button = event.target.closest("[data-category]");
-    if (!button) return;
-    activeCategory = button.dataset.category;
-    renderCategories();
-    renderProducts();
-    document.getElementById("san-pham")?.scrollIntoView({ behavior: "smooth" });
-  });
+  document
+    .getElementById("category-grid")
+    .addEventListener("click", (event) => {
+      const button = event.target.closest("[data-category]");
+      if (!button) return;
+      selectedCategory = button.dataset.category;
+      renderCategories();
+      renderProducts();
+      document
+        .getElementById("product")
+        ?.scrollIntoView({ behavior: "smooth" });
+    });
 
-  document.querySelector("[data-search]")?.addEventListener("input", (event) => {
-    activeSearch = event.target.value;
-    renderProducts();
-  });
+  document
+    .querySelector("[data-search]")
+    ?.addEventListener("input", (event) => {
+      searchTerm = event.target.value;
+      renderProducts();
+    });
 
   try {
-    const result = await apiRequest("/products", { signal: AbortSignal.timeout(12000) });
+    const result = await apiRequest("/products", {
+      signal: AbortSignal.timeout(12000),
+    });
     allProducts = Array.isArray(result.data) ? result.data : [];
     renderProducts();
   } catch (error) {

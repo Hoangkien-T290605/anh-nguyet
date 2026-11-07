@@ -1,15 +1,10 @@
+<!-- Trang giỏ hàng, hiển thị các sản phẩm đã lưu trên trình duyệt/tài khoản. -->
 <!doctype html>
 <html lang="vi">
   <head>
-    <link
-      rel="stylesheet"
-      href="./site.css"
-    />
+    <link rel="stylesheet" href="./site.css" />
     <meta charset="UTF-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1.0"
-    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#7041a6" />
     <title>Giỏ hàng | Ánh Nguyệt</title>
   </head>
@@ -18,9 +13,12 @@
       <div id="site-header"></div>
       <div id="page-content">
         <main class="cart-page">
-          <div class="cart-main">
-            <nav class="cart-breadcrumb" aria-label="Đường dẫn"><a href="index.html">TRANG CHỦ</a><span>/</span><span>GIỎ HÀNG</span></nav>
-            <section class="cart-title">
+          <div class="cart-primary">
+            <nav class="cart-breadcrumb" aria-label="Đường dẫn">
+              <a href="index.html">TRANG CHỦ</a><span>/</span
+              ><span>GIỎ HÀNG</span>
+            </nav>
+            <section class="cart-heading">
               <p>ÁNH NGUYỆT COLLECTION</p>
               <h1>GIỎ HÀNG CỦA BẠN</h1>
               <span>Kiểm tra những sản phẩm bạn đã lựa chọn.</span>
@@ -29,47 +27,59 @@
             <section class="cart-empty" id="cart-empty" hidden>
               <div class="cart-empty-icon">🛒</div>
               <h2>Giỏ hàng đang trống</h2>
-              <p>Bạn chưa có sản phẩm nào trong giỏ hàng. Hãy khám phá các sản phẩm từ Ánh Nguyệt nhé!</p>
-              <a class="cart-continue-button" href="products.html">KHÁM PHÁ SẢN PHẨM</a>
+              <p>
+                Bạn chưa có sản phẩm nào trong giỏ hàng. Hãy khám phá các sản
+                phẩm từ Ánh Nguyệt nhé!
+              </p>
+              <a class="cart-continue-button" href="products.html"
+                >KHÁM PHÁ SẢN PHẨM</a
+              >
             </section>
             <section id="cart-content" class="cart-content" hidden>
               <div class="cart-list">
                 <div class="cart-list-heading">
                   <h2>Sản phẩm đã chọn</h2>
-                  <span id="cart-item-count">0 sản phẩm</span>
+                  <span id="cart-item-quantity">0 sản phẩm</span>
                 </div>
-                <div id="cart-items"></div>
+                <div id="cart-item"></div>
                 <div class="cart-list-footer">
                   <a href="products.html">← Tiếp tục mua sắm</a>
-                  <button type="button" id="clear-cart">Xóa toàn bộ giỏ hàng</button>
+                  <button type="button" id="delete-cart">
+                    Xóa toàn bộ giỏ hàng
+                  </button>
                 </div>
               </div>
               <aside class="cart-summary">
                 <h2>TỔNG ĐƠN HÀNG</h2>
                 <div class="summary-row">
                   <span>Số lượng sản phẩm</span>
-                  <strong id="cart-item-count-summary">0</strong>
+                  <strong id="cart-item-quantity-summary">0</strong>
                 </div>
                 <div class="summary-row">
                   <span>Tạm tính</span>
-                  <strong id="cart-subtotal">0đ</strong>
+                  <strong id="cart-tam-tinh">0đ</strong>
                 </div>
                 <div class="summary-row">
                   <span>Phí vận chuyển</span>
                   <strong>Chưa tính</strong>
                 </div>
                 <div class="summary-divider"></div>
-                <div class="summary-total">
+                <div class="summary-tong">
                   <span>Tổng tiền</span>
-                  <strong id="cart-total">0đ</strong>
+                  <strong id="cart-tong">0đ</strong>
                 </div>
                 <button
                   id="checkout-button"
                   class="checkout-button"
                   type="button"
                   disabled
-                >TIẾN HÀNH ĐẶT HÀNG</button>
-                <p class="checkout-note">Phí vận chuyển và xác nhận đơn sẽ được làm rõ ở bước thanh toán.</p>
+                >
+                  TIẾN HÀNH ĐẶT HÀNG
+                </button>
+                <p class="checkout-note">
+                  Phí vận chuyển và xác nhận đơn sẽ được làm rõ ở bước thanh
+                  toán.
+                </p>
               </aside>
             </section>
           </div>
@@ -78,8 +88,8 @@
       <div id="footer-container"></div>
     </div>
     <div
-      class="toast-message"
-      id="site-toast"
+      class="toast-notification"
+      id="page-toast-notification"
       role="status"
       aria-live="polite"
       hidden

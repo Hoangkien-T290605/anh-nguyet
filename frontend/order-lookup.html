@@ -1,0 +1,40 @@
+<!-- Trang tra cứu đơn hàng bằng mã đơn và số điện thoại nhận hàng. -->
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#7041a6" />
+    <link rel="stylesheet" href="./site.css" />
+    <title>Tra cứu đơn hàng | Ánh Nguyệt</title>
+  </head>
+  <body data-page="order-lookup">
+    <div class="site-shell">
+      <div id="site-header"></div>
+      <div id="page-content">
+        <main class="account-page order-lookup-page">
+          <div class="order-lookup-primary">
+            <nav class="cart-breadcrumb" aria-label="Đường dẫn">
+              <a href="index.html">TRANG CHỦ</a><span>/</span
+              ><span>TRA CỨU ĐƠN HÀNG</span>
+            </nav>
+            <section class="cart-heading">
+              <p>ÁNH NGUYỆT COLLECTION</p>
+              <h1>TRA CỨU ĐƠN HÀNG</h1>
+              <span>Nhập mã đơn và số điện thoại đã dùng khi đặt hàng.</span>
+            </section>
+            <div id="order-lookup-goc" aria-live="polite">
+              <div class="checkout-loading">
+                <span class="account-loading-spinner"></span>
+                <p>Đang tải...</p>
+              </div>
+            </div>
+          </div>
+        </main>
+      </div>
+      <div id="footer-container"></div>
+    </div>
+    <script src="./config.js"></script>
+    <script type="module" src="./src/js/main.js"></script>
+  </body>
+</html>

@@ -1,3 +1,4 @@
+// API Express của Ánh Nguyệt; giữ hợp đồng JSON trong khi ánh xạ tên DB tiếng Việt.
 const express = require("express");
 const cors = require("cors");
 const mysql = require("mysql2/promise");
@@ -37,8 +38,7 @@ const avatarStorage = multer.diskStorage({
 
   filename: (req, file, callback) => {
     const extension = allowedImageTypes[file.mimetype];
-    const filename =
-      `${Date.now()}-${crypto.randomBytes(8).toString("hex")}${extension}`;
+    const filename = `${Date.now()}-${crypto.randomBytes(8).toString("hex")}${extension}`;
 
     callback(null, filename);
   },
@@ -52,16 +52,15 @@ const uploadAvatar = multer({
   },
   fileFilter: (req, file, callback) => {
     if (!allowedImageTypes[file.mimetype]) {
-      return callback(
-        new Error("Chỉ chấp nhận ảnh JPG, PNG, WEBP hoặc GIF")
-      );
+      return callback(new Error("Chỉ chấp nhận ảnh JPG, PNG, WEBP hoặc GIF"));
     }
 
     callback(null, true);
   },
 }).single("avatar");
 
-async function deleteOldAvatar(avatarUrl) {
+// Xóa ảnh đại diện cũ chỉ khi đường dẫn thuộc thư mục upload của ứng dụng.
+async function xoaAnhDaiDienCu(avatarUrl) {
   if (
     typeof avatarUrl !== "string" ||
     !avatarUrl.startsWith("/uploads/avatars/")
@@ -90,7 +89,7 @@ async function deleteOldAvatar(avatarUrl) {
 app.use(cors());
 app.use(express.json());
 
-const pool = mysql.createPool({
+const boKetNoiGoc = mysql.createPool({
   host: process.env.DB_HOST || "localhost",
   port: Number(process.env.DB_PORT) || 3306,
   user: process.env.DB_USER || "root",
@@ -101,19 +100,288 @@ const pool = mysql.createPool({
   queueLimit: 0,
 });
 
+// Ánh xạ tên bảng vật lý Việt hóa sang tên tương thích với truy vấn hiện có.
+const tenBangViet = {
+  users: "nguoi_dung",
+  products: "san_pham",
+  user_addresses: "dia_chi_nguoi_dung",
+  product_reviews: "danh_gia_san_pham",
+  orders: "don_hang",
+  order_items: "chi_tiet_don_hang",
+  user_cart_items: "chi_tiet_gio_hang",
+};
+
+// Ánh xạ cột theo từng bảng; phản hồi API vẫn dùng các khóa JSON cũ.
+const tenCotViet = {
+  users: {
+    id: "ma_nguoi_dung",
+    full_name: "ho_ten",
+    email: "email",
+    password: "mat_khau_ma_hoa",
+    phone: "so_dien_thoai",
+    address: "dia_chi_mac_dinh",
+    avatar_url: "duong_dan_anh_dai_dien",
+    role: "vai_tro",
+    created_at: "ngay_tao",
+    updated_at: "ngay_cap_nhat",
+  },
+  products: {
+    id: "ma_san_pham",
+    name: "ten_san_pham",
+    description: "mo_ta",
+    price: "gia_ban",
+    category: "danh_muc",
+    image: "duong_dan_anh",
+    stock: "so_luong_ton",
+    featured: "noi_bat",
+    active: "dang_kinh_doanh",
+    created_at: "ngay_tao",
+    updated_at: "ngay_cap_nhat",
+  },
+  user_addresses: {
+    id: "ma_dia_chi",
+    user_id: "ma_nguoi_dung",
+    recipient_name: "ten_nguoi_nhan",
+    phone: "so_dien_thoai",
+    address: "dia_chi_day_du",
+    is_default: "mac_dinh",
+    latitude: "vi_do",
+    longitude: "kinh_do",
+    created_at: "ngay_tao",
+    updated_at: "ngay_cap_nhat",
+  },
+  product_reviews: {
+    id: "ma_danh_gia",
+    product_id: "ma_san_pham",
+    customer_name: "ten_khach_hang",
+    rating: "so_sao",
+    comment: "noi_dung",
+    media: "tep_dinh_kem",
+    created_at: "ngay_tao",
+  },
+  orders: {
+    id: "ma_don_hang",
+    customer_id: "ma_nguoi_dat",
+    user_address_id: "ma_dia_chi",
+    recipient_name: "ten_nguoi_nhan",
+    recipient_phone: "so_dien_thoai_nhan",
+    shipping_address: "dia_chi_giao_hang",
+    subtotal: "tam_tinh",
+    shipping_fee: "phi_van_chuyen",
+    payment_method: "phuong_thuc_thanh_toan",
+    payment_status: "trang_thai_thanh_toan",
+    total_amount: "tong_tien",
+    status: "trang_thai",
+    created_at: "ngay_tao",
+    updated_at: "ngay_cap_nhat",
+    idempotency_key: "ma_yeu_cau",
+    request_fingerprint: "dau_van_tay_yeu_cau",
+  },
+  order_items: {
+    id: "ma_chi_tiet",
+    order_id: "ma_don_hang",
+    product_id: "ma_san_pham",
+    product_name: "ten_san_pham_luc_dat",
+    product_category: "danh_muc_luc_dat",
+    product_image: "anh_san_pham_luc_dat",
+    unit_price: "don_gia",
+    quantity: "so_luong",
+    line_total: "thanh_tien",
+    created_at: "ngay_tao",
+  },
+  user_cart_items: {
+    user_id: "ma_nguoi_dung",
+    product_id: "ma_san_pham",
+    quantity: "so_luong",
+    created_at: "ngay_tao",
+    updated_at: "ngay_cap_nhat",
+  },
+};
+
+const tokenSql =
+  /\s+|'(?:\\.|''|[^'])*'|"(?:\\.|""|[^"])*"|`[^`]*`|[A-Za-z_][A-Za-z0-9_$]*|\d+(?:\.\d+)?|./gs;
+const tuKhoaSql = new Set([
+  "AS",
+  "WHERE",
+  "SET",
+  "ON",
+  "INNER",
+  "LEFT",
+  "RIGHT",
+  "CROSS",
+  "JOIN",
+  "ORDER",
+  "GROUP",
+  "LIMIT",
+  "OFFSET",
+  "FOR",
+  "VALUES",
+  "VALUE",
+  "RETURNING",
+  "USE",
+  "UNION",
+  "WHEN",
+  "THEN",
+]);
+
+// Chỉ dịch tên định danh khi database đang dùng schema vật lý tiếng Việt.
+let coSoDuLieuDungTenViet = false;
+
+// Dịch các định danh SQL trước khi gửi truy vấn đến MySQL.
+function vietLaiCauSql(sql) {
+  if (!coSoDuLieuDungTenViet) return sql;
+
+  const tokens = sql.match(tokenSql) || [];
+  const aliases = new Map();
+  const tableIndexes = new Set();
+  let primaryTable = null;
+  // Bỏ qua khoảng trắng để tìm token SQL kế tiếp.
+  const layChiSoTokenTiepTheo = (start) => {
+    for (let index = start; index < tokens.length; index += 1) {
+      if (!/^\s+$/.test(tokens[index])) return index;
+    }
+    return -1;
+  };
+
+  for (let index = 0; index < tokens.length; index += 1) {
+    const word = tokens[index].replace(/^`|`$/g, "").toUpperCase();
+    if (!["FROM", "JOIN", "UPDATE", "INTO"].includes(word)) continue;
+    const tableIndex = layChiSoTokenTiepTheo(index + 1);
+    if (tableIndex < 0) continue;
+    const sourceTable = tokens[tableIndex].replace(/^`|`$/g, "");
+    if (!tenBangViet[sourceTable]) continue;
+
+    const destinationTable = tenBangViet[sourceTable];
+    tokens[tableIndex] = tokens[tableIndex].startsWith("`")
+      ? `\`${destinationTable}\``
+      : destinationTable;
+    tableIndexes.add(tableIndex);
+    const possibleAliasIndex = layChiSoTokenTiepTheo(tableIndex + 1);
+    let alias = sourceTable;
+    if (
+      possibleAliasIndex >= 0 &&
+      tokens[possibleAliasIndex].replace(/^`|`$/g, "").toUpperCase() === "AS"
+    ) {
+      const explicitAliasIndex = layChiSoTokenTiepTheo(possibleAliasIndex + 1);
+      if (explicitAliasIndex >= 0)
+        alias = tokens[explicitAliasIndex].replace(/^`|`$/g, "");
+    } else if (possibleAliasIndex >= 0) {
+      const possibleAlias = tokens[possibleAliasIndex].replace(/^`|`$/g, "");
+      if (
+        /^[A-Za-z_][A-Za-z0-9_$]*$/.test(possibleAlias) &&
+        !tuKhoaSql.has(possibleAlias.toUpperCase())
+      ) {
+        alias = possibleAlias;
+      }
+    }
+    aliases.set(alias, sourceTable);
+    aliases.set(sourceTable, sourceTable);
+    if (!primaryTable && ["FROM", "UPDATE", "INTO"].includes(word))
+      primaryTable = sourceTable;
+  }
+
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    const quotedIdentifier = token.startsWith("`") && token.endsWith("`");
+    const identifier = quotedIdentifier ? token.slice(1, -1) : token;
+    if (
+      (!quotedIdentifier && !/^[A-Za-z_][A-Za-z0-9_$]*$/.test(identifier)) ||
+      tableIndexes.has(index)
+    )
+      continue;
+    const previousIndex = layChiSoTokenTiepTheo(index - 1);
+    const nextIndex = layChiSoTokenTiepTheo(index + 1);
+    let table = primaryTable;
+    if (previousIndex >= 0 && tokens[previousIndex] === ".") {
+      const aliasIndex = layChiSoTokenTiepTheo(previousIndex - 1);
+      const alias =
+        aliasIndex >= 0 ? tokens[aliasIndex].replace(/^`|`$/g, "") : "";
+      table = aliases.get(alias) || table;
+    } else if (nextIndex >= 0 && tokens[nextIndex] === ".") {
+      continue;
+    }
+    const translated = tenCotViet[table]?.[identifier];
+    if (translated)
+      tokens[index] = quotedIdentifier ? `\`${translated}\`` : translated;
+  }
+
+  return tokens.join("");
+}
+
+// Đổi tên cột kết quả về hợp đồng JSON công khai của Frontend.
+function doiTenCotVeHopDongApi(rows, fields) {
+  if (!Array.isArray(rows) || !Array.isArray(fields) || !fields.length)
+    return rows;
+  return rows.map((row) => {
+    const result = {};
+    for (const field of fields) {
+      const outputName = field.name;
+      let key = outputName;
+      const physicalTable = Object.keys(tenBangViet).find(
+        (name) => tenBangViet[name] === field.orgTable,
+      );
+      if (physicalTable && field.orgName && outputName === field.orgName) {
+        const columns = tenCotViet[physicalTable];
+        key =
+          Object.keys(columns).find(
+            (name) => columns[name] === field.orgName,
+          ) || outputName;
+      }
+      result[key] = row[outputName];
+    }
+    return result;
+  });
+}
+
+// Bọc pool/kết nối để mọi truy vấn dùng chung bộ chuyển đổi định danh.
+function ganBoChuyenDoiCoSoDuLieu(executor) {
+  for (const method of ["query", "execute"]) {
+    const original = executor[method].bind(executor);
+    executor[method] = (sql, ...args) => {
+      const translatedSql = typeof sql === "string" ? vietLaiCauSql(sql) : sql;
+      return original(translatedSql, ...args).then(([rows, fields]) => [
+        doiTenCotVeHopDongApi(rows, fields),
+        fields,
+      ]);
+    };
+  }
+  return executor;
+}
+
+const pool = new Proxy(boKetNoiGoc, {
+  get(target, property) {
+    if (property === "query" || property === "execute") {
+      return (sql, ...args) => {
+        const translatedSql =
+          typeof sql === "string" ? vietLaiCauSql(sql) : sql;
+        return target[property](translatedSql, ...args).then(
+          ([rows, fields]) => [doiTenCotVeHopDongApi(rows, fields), fields],
+        );
+      };
+    }
+    if (property === "getConnection") {
+      return async (...args) =>
+        ganBoChuyenDoiCoSoDuLieu(await target.getConnection(...args));
+    }
+    const value = Reflect.get(target, property, target);
+    return typeof value === "function" ? value.bind(target) : value;
+  },
+});
+
 // =========================
 // QUẢN LÝ MÃ OTP ĐỔI MẬT KHẨU
 // =========================
 
 const passwordOtpStore = new Map();
 
-function createMailTransporter() {
+// Tạo cấu hình gửi thư nếu môi trường đã cung cấp thông tin SMTP.
+function taoBoGoiThu() {
   const email = process.env.GMAIL_USER;
   const appPassword = process.env.GMAIL_APP_PASSWORD?.replace(/\s/g, "");
 
   if (!email || !appPassword) {
     throw new Error(
-      "Chưa cấu hình GMAIL_USER và GMAIL_APP_PASSWORD trong file .env"
+      "Chưa cấu hình GMAIL_USER và GMAIL_APP_PASSWORD trong file .env",
     );
   }
 
@@ -130,7 +398,8 @@ function createMailTransporter() {
 // HÀM HỖ TRỢ
 // =========================
 
-function formatProduct(row) {
+// Chuyển một dòng sản phẩm MySQL thành cấu trúc JSON public.
+function chuanHoaSanPham(row) {
   return {
     ...row,
     _id: String(row.id),
@@ -141,7 +410,8 @@ function formatProduct(row) {
   };
 }
 
-function formatReview(row) {
+// Chuẩn hóa dữ liệu đánh giá trước khi trả về API.
+function chuanHoaDanhGia(row) {
   let media = row.media;
 
   if (typeof media === "string") {
@@ -165,11 +435,13 @@ function formatReview(row) {
   };
 }
 
-function formatUser(row) {
+// Bỏ thông tin xác thực và chuẩn hóa hồ sơ người dùng trả về.
+function chuanHoaNguoiDung(row) {
   return {
     id: Number(row.id),
     full_name: row.full_name,
     email: row.email,
+    role: row.role || "customer",
     phone: row.phone,
     address: row.address,
     avatar_url: row.avatar_url || null,
@@ -178,7 +450,8 @@ function formatUser(row) {
   };
 }
 
-function formatAddress(row) {
+// Chuẩn hóa địa chỉ giao hàng theo cấu trúc API hiện tại.
+function chuanHoaDiaChi(row) {
   return {
     id: Number(row.id),
     user_id: Number(row.user_id),
@@ -199,22 +472,22 @@ function formatAddress(row) {
   };
 }
 
-function createToken(user) {
+// Tạo JWT cho tài khoản đã được xác thực.
+function taoToken(user) {
   return jwt.sign(
     {
       id: user.id,
       email: user.email,
     },
     process.env.JWT_SECRET,
-    { expiresIn: "7d" }
+    { expiresIn: "7d" },
   );
 }
 
-function authenticateToken(req, res, next) {
+// Xác minh JWT và gắn tài khoản tương ứng vào yêu cầu Express.
+function xacThucToken(req, res, next) {
   const authHeader = req.headers.authorization;
-  const token = authHeader?.startsWith("Bearer ")
-    ? authHeader.slice(7)
-    : null;
+  const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
 
   if (!token) {
     return res.status(401).json({
@@ -234,8 +507,39 @@ function authenticateToken(req, res, next) {
   }
 }
 
+// Cho phép khách chưa đăng nhập tiếp tục nhưng xác minh token nếu có gửi lên.
+function xacThucTokenTuyChon(req, res, next) {
+  if (!req.headers.authorization) {
+    req.user = null;
+    return next();
+  }
+  return xacThucToken(req, res, next);
+}
+
+// Chặn thao tác quản trị nếu phiên hiện tại không có quyền Admin.
+async function yeuCauQuyenQuanTri(req, res, next) {
+  try {
+    const [rows] = await pool.execute(
+      "SELECT role FROM users WHERE id = ? LIMIT 1",
+      [req.user.id],
+    );
+    if (!rows.length || rows[0].role !== "admin") {
+      return res
+        .status(403)
+        .json({ success: false, message: "Bạn không có quyền quản trị" });
+    }
+    return next();
+  } catch (error) {
+    console.error("Lỗi kiểm tra quyền quản trị:", error.code || "UNKNOWN");
+    return res
+      .status(500)
+      .json({ success: false, message: "Không thể xác minh quyền quản trị" });
+  }
+}
+
 // Kiểm tra dữ liệu sản phẩm
-function validateProduct(body, partial = false) {
+// Kiểm tra các trường sản phẩm trước khi tạo mới hoặc cập nhật.
+function kiemTraDuLieuSanPham(body, partial = false) {
   const errors = [];
 
   if (!partial || body.name !== undefined) {
@@ -261,10 +565,7 @@ function validateProduct(body, partial = false) {
     }
   }
 
-  if (
-    body.description !== undefined &&
-    typeof body.description !== "string"
-  ) {
+  if (body.description !== undefined && typeof body.description !== "string") {
     errors.push("Mô tả phải là chuỗi ký tự");
   }
 
@@ -296,7 +597,8 @@ function validateProduct(body, partial = false) {
   return errors;
 }
 
-function getProductValues(body) {
+// Lấy giá trị đã chuẩn hóa để ghi sản phẩm vào cơ sở dữ liệu.
+function layGiaTriSanPham(body) {
   return {
     name: body.name.trim(),
     description: body.description ?? "",
@@ -324,12 +626,11 @@ const allowedFields = [
 ];
 
 // Kiểm tra tọa độ bản đồ
-function validateCoordinates(body) {
+// Kiểm tra tọa độ địa chỉ nằm trong phạm vi hợp lệ.
+function kiemTraToaDo(body) {
   const { latitude, longitude } = body;
 
-  if (
-    (latitude === null) !== (longitude === null)
-  ) {
+  if ((latitude === null) !== (longitude === null)) {
     return "Vui lòng cung cấp đầy đủ kinh độ và vĩ độ";
   }
 
@@ -364,7 +665,8 @@ function validateCoordinates(body) {
 }
 
 // Kiểm tra dữ liệu địa chỉ
-function validateAddress(body) {
+// Kiểm tra và chuẩn hóa dữ liệu địa chỉ nhận hàng.
+function kiemTraDuLieuDiaChi(body) {
   if (
     typeof body.recipient_name !== "string" ||
     !body.recipient_name.trim() ||
@@ -381,10 +683,7 @@ function validateAddress(body) {
     return "Số điện thoại không hợp lệ";
   }
 
-  if (
-    typeof body.address !== "string" ||
-    !body.address.trim()
-  ) {
+  if (typeof body.address !== "string" || !body.address.trim()) {
     return "Địa chỉ không được để trống";
   }
 
@@ -397,7 +696,7 @@ function validateAddress(body) {
     return "Trạng thái mặc định không hợp lệ";
   }
 
-  return validateCoordinates(body);
+  return kiemTraToaDo(body);
 }
 
 const ORDER_STATUSES = new Set([
@@ -409,36 +708,69 @@ const ORDER_STATUSES = new Set([
   "cancelled",
 ]);
 
-class OrderApiError extends Error {
+const guestOrderLookupAttempts = new Map();
+const GUEST_LOOKUP_WINDOW_MS = 15 * 60 * 1000;
+const GUEST_LOOKUP_MAX_ATTEMPTS = 5;
+
+// Giới hạn tần suất tra cứu đơn công khai theo thông tin yêu cầu.
+function gioiHanTraCuuDonKhach(req, res, next) {
+  const now = Date.now();
+  const key = req.ip || req.socket.remoteAddress || "unknown";
+  let attempt = guestOrderLookupAttempts.get(key);
+  if (!attempt || now >= attempt.resetAt) {
+    attempt = { count: 0, resetAt: now + GUEST_LOOKUP_WINDOW_MS };
+  }
+  if (attempt.count >= GUEST_LOOKUP_MAX_ATTEMPTS) {
+    res.set("Retry-After", String(Math.ceil((attempt.resetAt - now) / 1000)));
+    return res.status(429).json({
+      success: false,
+      message: "Bạn đã tra cứu quá nhiều lần. Vui lòng thử lại sau.",
+    });
+  }
+  attempt.count++;
+  guestOrderLookupAttempts.set(key, attempt);
+  if (guestOrderLookupAttempts.size > 10000) {
+    for (const [ip, value] of guestOrderLookupAttempts) {
+      if (now >= value.resetAt) guestOrderLookupAttempts.delete(ip);
+    }
+  }
+  return next();
+}
+
+class LoiApiDonHang extends Error {
   constructor(status, message) {
     super(message);
     this.status = status;
   }
 }
 
-function parsePositiveInteger(value, fieldName) {
+// Đọc số nguyên dương và báo lỗi theo tên trường hiển thị.
+function docSoNguyenDuong(value, fieldName) {
   const normalized = typeof value === "string" ? value.trim() : value;
   if (
     (typeof normalized !== "number" && !/^\d+$/.test(String(normalized))) ||
     !Number.isSafeInteger(Number(normalized)) ||
     Number(normalized) < 1
   ) {
-    throw new OrderApiError(400, `${fieldName} không hợp lệ`);
+    throw new LoiApiDonHang(400, `${fieldName} không hợp lệ`);
   }
   return Number(normalized);
 }
 
-function toMoneyCents(value) {
+// Quy đổi tiền sang số nguyên xu để tránh sai số dấu phẩy động.
+function doiSangSoTienXu(value) {
   const match = /^(\d+)(?:\.(\d{1,2}))?$/.exec(String(value));
   if (!match) throw new Error("Giá sản phẩm trong database không hợp lệ");
   return BigInt(match[1]) * 100n + BigInt((match[2] || "").padEnd(2, "0"));
 }
 
-function fromMoneyCents(cents) {
+// Chuyển số xu nguyên về giá trị tiền dùng trong phản hồi.
+function doiTuSoTienXu(cents) {
   return `${cents / 100n}.${String(cents % 100n).padStart(2, "0")}`;
 }
 
-function formatOrderItem(row) {
+// Chuẩn hóa một dòng hàng lưu tại thời điểm khách đặt đơn.
+function chuanHoaChiTietDonHang(row) {
   return {
     id: String(row.id),
     product_id: row.product_id === null ? null : Number(row.product_id),
@@ -451,10 +783,12 @@ function formatOrderItem(row) {
   };
 }
 
-function formatOrder(row, items = []) {
+// Chuẩn hóa đơn và danh sách chi tiết theo hợp đồng API.
+function chuanHoaDonHang(row, items = []) {
   return {
     id: String(row.id),
-    user_address_id: row.user_address_id === null ? null : Number(row.user_address_id),
+    user_address_id:
+      row.user_address_id === null ? null : Number(row.user_address_id),
     recipient_name: row.recipient_name,
     recipient_phone: row.recipient_phone,
     shipping_address: row.shipping_address,
@@ -462,13 +796,16 @@ function formatOrder(row, items = []) {
     shipping_fee: row.shipping_fee === null ? null : Number(row.shipping_fee),
     total_amount: Number(row.total_amount),
     status: row.status,
+    payment_method: row.payment_method || null,
+    payment_status: row.payment_status || "pending",
     created_at: row.created_at,
     updated_at: row.updated_at,
     items,
   };
 }
 
-async function loadOrderItems(connection, orderIds) {
+// Lấy chi tiết cho một hoặc nhiều đơn bằng kết nối hiện tại.
+async function layChiTietDonHang(connection, orderIds) {
   if (!orderIds.length) return new Map();
   const placeholders = orderIds.map(() => "?").join(",");
   const [rows] = await connection.execute(
@@ -477,23 +814,24 @@ async function loadOrderItems(connection, orderIds) {
      FROM order_items
      WHERE order_id IN (${placeholders})
      ORDER BY id ASC`,
-    orderIds
+    orderIds,
   );
   const grouped = new Map();
   for (const row of rows) {
     const key = String(row.order_id);
     if (!grouped.has(key)) grouped.set(key, []);
-    grouped.get(key).push(formatOrderItem(row));
+    grouped.get(key).push(chuanHoaChiTietDonHang(row));
   }
   return grouped;
 }
 
 // Đồng bộ địa chỉ mặc định vào hồ sơ tài khoản
-async function syncDefaultAddressToProfile(connection, userId, address) {
-  await connection.execute(
-    "UPDATE users SET address = ? WHERE id = ?",
-    [address || null, userId]
-  );
+// Đồng bộ địa chỉ mặc định vào phần hồ sơ tương thích cũ.
+async function dongBoDiaChiMacDinhVaoHoSo(connection, userId, address) {
+  await connection.execute("UPDATE users SET address = ? WHERE id = ?", [
+    address || null,
+    userId,
+  ]);
 }
 
 // =========================
@@ -595,7 +933,7 @@ app.post("/api/auth/register", async (req, res) => {
 
     const [existingUsers] = await pool.execute(
       "SELECT id FROM users WHERE email = ?",
-      [normalizedEmail]
+      [normalizedEmail],
     );
 
     if (existingUsers.length > 0) {
@@ -617,20 +955,17 @@ app.post("/api/auth/register", async (req, res) => {
         hashedPassword,
         phone?.trim() || null,
         address?.trim() || null,
-      ]
+      ],
     );
 
-    const [rows] = await pool.execute(
-      `SELECT id, full_name, email, phone, address, avatar_url,
-              created_at, updated_at
-       FROM users WHERE id = ?`,
-      [result.insertId]
-    );
+    const [rows] = await pool.execute("SELECT * FROM users WHERE id = ?", [
+      result.insertId,
+    ]);
 
     res.status(201).json({
       success: true,
       message: "Đăng ký tài khoản thành công",
-      user: formatUser(rows[0]),
+      user: chuanHoaNguoiDung(rows[0]),
     });
   } catch (error) {
     console.error("Lỗi đăng ký:", error.message);
@@ -668,10 +1003,9 @@ app.post("/api/auth/login", async (req, res) => {
 
     const normalizedEmail = email.trim().toLowerCase();
 
-    const [rows] = await pool.execute(
-      "SELECT * FROM users WHERE email = ?",
-      [normalizedEmail]
-    );
+    const [rows] = await pool.execute("SELECT * FROM users WHERE email = ?", [
+      normalizedEmail,
+    ]);
 
     if (!rows.length) {
       return res.status(401).json({
@@ -682,10 +1016,7 @@ app.post("/api/auth/login", async (req, res) => {
 
     const userRow = rows[0];
 
-    const passwordMatches = await bcrypt.compare(
-      password,
-      userRow.password
-    );
+    const passwordMatches = await bcrypt.compare(password, userRow.password);
 
     if (!passwordMatches) {
       return res.status(401).json({
@@ -694,8 +1025,8 @@ app.post("/api/auth/login", async (req, res) => {
       });
     }
 
-    const user = formatUser(userRow);
-    const token = createToken(user);
+    const user = chuanHoaNguoiDung(userRow);
+    const token = taoToken(user);
 
     res.json({
       success: true,
@@ -714,14 +1045,11 @@ app.post("/api/auth/login", async (req, res) => {
 });
 
 // Lấy thông tin tài khoản
-app.get("/api/auth/me", authenticateToken, async (req, res) => {
+app.get("/api/auth/me", xacThucToken, async (req, res) => {
   try {
-    const [rows] = await pool.execute(
-      `SELECT id, full_name, email, phone, address, avatar_url,
-              created_at, updated_at
-       FROM users WHERE id = ?`,
-      [req.user.id]
-    );
+    const [rows] = await pool.execute("SELECT * FROM users WHERE id = ?", [
+      req.user.id,
+    ]);
 
     if (!rows.length) {
       return res.status(404).json({
@@ -732,7 +1060,7 @@ app.get("/api/auth/me", authenticateToken, async (req, res) => {
 
     res.json({
       success: true,
-      user: formatUser(rows[0]),
+      user: chuanHoaNguoiDung(rows[0]),
     });
   } catch (error) {
     console.error("Lỗi lấy thông tin tài khoản:", error.message);
@@ -745,7 +1073,7 @@ app.get("/api/auth/me", authenticateToken, async (req, res) => {
 });
 
 // Cập nhật thông tin tài khoản và đồng bộ địa chỉ
-app.put("/api/auth/me", authenticateToken, async (req, res) => {
+app.put("/api/auth/me", xacThucToken, async (req, res) => {
   const connection = await pool.getConnection();
 
   try {
@@ -815,7 +1143,7 @@ app.put("/api/auth/me", authenticateToken, async (req, res) => {
     const [userRows] = await connection.execute(
       `SELECT id, full_name, phone, address
        FROM users WHERE id = ? FOR UPDATE`,
-      [req.user.id]
+      [req.user.id],
     );
 
     if (!userRows.length) {
@@ -833,7 +1161,7 @@ app.put("/api/auth/me", authenticateToken, async (req, res) => {
 
     await connection.execute(
       `UPDATE users SET ${updates.join(", ")} WHERE id = ?`,
-      values
+      values,
     );
 
     if (address !== undefined && address?.trim()) {
@@ -842,7 +1170,7 @@ app.put("/api/auth/me", authenticateToken, async (req, res) => {
          FROM user_addresses
          WHERE user_id = ? AND is_default = TRUE
          LIMIT 1`,
-        [req.user.id]
+        [req.user.id],
       );
 
       if (defaultRows.length) {
@@ -850,11 +1178,7 @@ app.put("/api/auth/me", authenticateToken, async (req, res) => {
           `UPDATE user_addresses
            SET address = ?, latitude = NULL, longitude = NULL
            WHERE id = ? AND user_id = ?`,
-          [
-            address.trim(),
-            defaultRows[0].id,
-            req.user.id,
-          ]
+          [address.trim(), defaultRows[0].id, req.user.id],
         );
       } else if (phone?.trim() || currentUser.phone) {
         const recipientPhone = phone?.trim() || currentUser.phone;
@@ -863,7 +1187,7 @@ app.put("/api/auth/me", authenticateToken, async (req, res) => {
           `UPDATE user_addresses
            SET is_default = FALSE
            WHERE user_id = ?`,
-          [req.user.id]
+          [req.user.id],
         );
 
         await connection.execute(
@@ -875,16 +1199,14 @@ app.put("/api/auth/me", authenticateToken, async (req, res) => {
             full_name?.trim() || currentUser.full_name,
             recipientPhone,
             address.trim(),
-          ]
+          ],
         );
       }
     }
 
     const [rows] = await connection.execute(
-      `SELECT id, full_name, email, phone, address, avatar_url,
-              created_at, updated_at
-       FROM users WHERE id = ?`,
-      [req.user.id]
+      "SELECT * FROM users WHERE id = ?",
+      [req.user.id],
     );
 
     await connection.commit();
@@ -892,7 +1214,7 @@ app.put("/api/auth/me", authenticateToken, async (req, res) => {
     res.json({
       success: true,
       message: "Cập nhật thông tin thành công",
-      user: formatUser(rows[0]),
+      user: chuanHoaNguoiDung(rows[0]),
     });
   } catch (error) {
     await connection.rollback();
@@ -915,14 +1237,10 @@ app.put("/api/auth/me", authenticateToken, async (req, res) => {
 // Bước 1: Kiểm tra mật khẩu hiện tại và gửi OTP
 app.post(
   "/api/auth/change-password/request-otp",
-  authenticateToken,
+  xacThucToken,
   async (req, res) => {
     try {
-      const {
-        current_password,
-        new_password,
-        confirm_password,
-      } = req.body;
+      const { current_password, new_password, confirm_password } = req.body;
 
       if (
         typeof current_password !== "string" ||
@@ -959,7 +1277,7 @@ app.post(
 
       const [users] = await pool.execute(
         "SELECT id, email, password FROM users WHERE id = ?",
-        [req.user.id]
+        [req.user.id],
       );
 
       if (!users.length) {
@@ -973,7 +1291,7 @@ app.post(
 
       const passwordMatches = await bcrypt.compare(
         current_password,
-        user.password
+        user.password,
       );
 
       if (!passwordMatches) {
@@ -983,10 +1301,7 @@ app.post(
         });
       }
 
-      const isSamePassword = await bcrypt.compare(
-        new_password,
-        user.password
-      );
+      const isSamePassword = await bcrypt.compare(new_password, user.password);
 
       if (isSamePassword) {
         return res.status(400).json({
@@ -1004,10 +1319,7 @@ app.post(
 
       const otp = crypto.randomInt(100000, 1000000).toString();
 
-      const otpHash = crypto
-        .createHash("sha256")
-        .update(otp)
-        .digest("hex");
+      const otpHash = crypto.createHash("sha256").update(otp).digest("hex");
 
       const newPasswordHash = await bcrypt.hash(new_password, 12);
 
@@ -1019,7 +1331,7 @@ app.post(
       });
 
       try {
-        const transporter = createMailTransporter();
+        const transporter = taoBoGoiThu();
 
         await transporter.sendMail({
           from: `"Ánh Nguyệt" <${process.env.GMAIL_USER}>`,
@@ -1073,21 +1385,18 @@ app.post(
         message: "Không thể gửi mã OTP",
       });
     }
-  }
+  },
 );
 
 // Bước 2: Xác nhận OTP và cập nhật mật khẩu
 app.post(
   "/api/auth/change-password/verify-otp",
-  authenticateToken,
+  xacThucToken,
   async (req, res) => {
     try {
       const { otp } = req.body;
 
-      if (
-        typeof otp !== "string" ||
-        !/^\d{6}$/.test(otp)
-      ) {
+      if (typeof otp !== "string" || !/^\d{6}$/.test(otp)) {
         return res.status(400).json({
           success: false,
           message: "Vui lòng nhập mã OTP gồm 6 chữ số",
@@ -1118,7 +1427,8 @@ app.post(
 
         return res.status(400).json({
           success: false,
-          message: "Bạn đã nhập sai OTP quá số lần cho phép. Vui lòng gửi mã mới",
+          message:
+            "Bạn đã nhập sai OTP quá số lần cho phép. Vui lòng gửi mã mới",
         });
       }
 
@@ -1144,7 +1454,7 @@ app.post(
         `UPDATE users
          SET password = ?, updated_at = CURRENT_TIMESTAMP
          WHERE id = ?`,
-        [otpData.newPasswordHash, req.user.id]
+        [otpData.newPasswordHash, req.user.id],
       );
 
       if (result.affectedRows === 0) {
@@ -1170,7 +1480,7 @@ app.post(
         message: "Không thể xác nhận OTP và đổi mật khẩu",
       });
     }
-  }
+  },
 );
 
 // =========================
@@ -1179,7 +1489,7 @@ app.post(
 
 app.post(
   "/api/auth/avatar",
-  authenticateToken,
+  xacThucToken,
   (req, res, next) => {
     uploadAvatar(req, res, (error) => {
       if (error) {
@@ -1215,11 +1525,11 @@ app.post(
     try {
       const [existingRows] = await pool.execute(
         "SELECT avatar_url FROM users WHERE id = ?",
-        [req.user.id]
+        [req.user.id],
       );
 
       if (!existingRows.length) {
-        await deleteOldAvatar(newAvatarUrl);
+        await xoaAnhDaiDienCu(newAvatarUrl);
 
         return res.status(404).json({
           success: false,
@@ -1229,30 +1539,27 @@ app.post(
 
       const oldAvatarUrl = existingRows[0].avatar_url;
 
-      await pool.execute(
-        "UPDATE users SET avatar_url = ? WHERE id = ?",
-        [newAvatarUrl, req.user.id]
-      );
+      await pool.execute("UPDATE users SET avatar_url = ? WHERE id = ?", [
+        newAvatarUrl,
+        req.user.id,
+      ]);
 
-      const [rows] = await pool.execute(
-        `SELECT id, full_name, email, phone, address, avatar_url,
-                created_at, updated_at
-         FROM users WHERE id = ?`,
-        [req.user.id]
-      );
+      const [rows] = await pool.execute("SELECT * FROM users WHERE id = ?", [
+        req.user.id,
+      ]);
 
       if (oldAvatarUrl && oldAvatarUrl !== newAvatarUrl) {
-        await deleteOldAvatar(oldAvatarUrl);
+        await xoaAnhDaiDienCu(oldAvatarUrl);
       }
 
       res.json({
         success: true,
         message: "Cập nhật ảnh đại diện thành công",
         avatar_url: newAvatarUrl,
-        user: formatUser(rows[0]),
+        user: chuanHoaNguoiDung(rows[0]),
       });
     } catch (error) {
-      await deleteOldAvatar(newAvatarUrl);
+      await xoaAnhDaiDienCu(newAvatarUrl);
 
       console.error("Lỗi upload ảnh đại diện:", error.message);
 
@@ -1261,7 +1568,7 @@ app.post(
         message: "Không thể cập nhật ảnh đại diện",
       });
     }
-  }
+  },
 );
 
 // =========================
@@ -1269,20 +1576,20 @@ app.post(
 // =========================
 
 // Lấy danh sách địa chỉ
-app.get("/api/auth/addresses", authenticateToken, async (req, res) => {
+app.get("/api/auth/addresses", xacThucToken, async (req, res) => {
   try {
     const [rows] = await pool.execute(
       `SELECT *
        FROM user_addresses
        WHERE user_id = ?
        ORDER BY is_default DESC, created_at DESC`,
-      [req.user.id]
+      [req.user.id],
     );
 
     res.json({
       success: true,
       count: rows.length,
-      data: rows.map(formatAddress),
+      data: rows.map(chuanHoaDiaChi),
     });
   } catch (error) {
     console.error("Lỗi lấy danh sách địa chỉ:", error.message);
@@ -1295,8 +1602,8 @@ app.get("/api/auth/addresses", authenticateToken, async (req, res) => {
 });
 
 // Thêm địa chỉ
-app.post("/api/auth/addresses", authenticateToken, async (req, res) => {
-  const validationError = validateAddress(req.body);
+app.post("/api/auth/addresses", xacThucToken, async (req, res) => {
+  const validationError = kiemTraDuLieuDiaChi(req.body);
 
   if (validationError) {
     return res.status(400).json({
@@ -1312,7 +1619,7 @@ app.post("/api/auth/addresses", authenticateToken, async (req, res) => {
 
     const [existingRows] = await connection.execute(
       "SELECT id FROM user_addresses WHERE user_id = ?",
-      [req.user.id]
+      [req.user.id],
     );
 
     const shouldBeDefault =
@@ -1323,7 +1630,7 @@ app.post("/api/auth/addresses", authenticateToken, async (req, res) => {
     if (shouldBeDefault) {
       await connection.execute(
         "UPDATE user_addresses SET is_default = FALSE WHERE user_id = ?",
-        [req.user.id]
+        [req.user.id],
       );
     }
 
@@ -1340,20 +1647,20 @@ app.post("/api/auth/addresses", authenticateToken, async (req, res) => {
         shouldBeDefault,
         req.body.latitude ?? null,
         req.body.longitude ?? null,
-      ]
+      ],
     );
 
     if (shouldBeDefault) {
-      await syncDefaultAddressToProfile(
+      await dongBoDiaChiMacDinhVaoHoSo(
         connection,
         req.user.id,
-        req.body.address.trim()
+        req.body.address.trim(),
       );
     }
 
     const [rows] = await connection.execute(
       "SELECT * FROM user_addresses WHERE id = ? AND user_id = ?",
-      [result.insertId, req.user.id]
+      [result.insertId, req.user.id],
     );
 
     await connection.commit();
@@ -1361,7 +1668,7 @@ app.post("/api/auth/addresses", authenticateToken, async (req, res) => {
     res.status(201).json({
       success: true,
       message: "Thêm địa chỉ thành công",
-      data: formatAddress(rows[0]),
+      data: chuanHoaDiaChi(rows[0]),
     });
   } catch (error) {
     await connection.rollback();
@@ -1378,7 +1685,7 @@ app.post("/api/auth/addresses", authenticateToken, async (req, res) => {
 });
 
 // Cập nhật địa chỉ
-app.put("/api/auth/addresses/:id", authenticateToken, async (req, res) => {
+app.put("/api/auth/addresses/:id", xacThucToken, async (req, res) => {
   const id = Number(req.params.id);
 
   if (!Number.isSafeInteger(id) || id < 1) {
@@ -1388,7 +1695,7 @@ app.put("/api/auth/addresses/:id", authenticateToken, async (req, res) => {
     });
   }
 
-  const validationError = validateAddress(req.body);
+  const validationError = kiemTraDuLieuDiaChi(req.body);
 
   if (validationError) {
     return res.status(400).json({
@@ -1404,7 +1711,7 @@ app.put("/api/auth/addresses/:id", authenticateToken, async (req, res) => {
 
     const [existingRows] = await connection.execute(
       "SELECT * FROM user_addresses WHERE id = ? AND user_id = ?",
-      [id, req.user.id]
+      [id, req.user.id],
     );
 
     if (!existingRows.length) {
@@ -1424,9 +1731,7 @@ app.put("/api/auth/addresses/:id", authenticateToken, async (req, res) => {
         : req.body.is_default === true || req.body.is_default === 1;
 
     const latitude =
-      req.body.latitude === undefined
-        ? oldAddress.latitude
-        : req.body.latitude;
+      req.body.latitude === undefined ? oldAddress.latitude : req.body.latitude;
 
     const longitude =
       req.body.longitude === undefined
@@ -1436,7 +1741,7 @@ app.put("/api/auth/addresses/:id", authenticateToken, async (req, res) => {
     if (shouldBeDefault) {
       await connection.execute(
         "UPDATE user_addresses SET is_default = FALSE WHERE user_id = ?",
-        [req.user.id]
+        [req.user.id],
       );
     }
 
@@ -1458,20 +1763,20 @@ app.put("/api/auth/addresses/:id", authenticateToken, async (req, res) => {
         longitude,
         id,
         req.user.id,
-      ]
+      ],
     );
 
     if (shouldBeDefault) {
-      await syncDefaultAddressToProfile(
+      await dongBoDiaChiMacDinhVaoHoSo(
         connection,
         req.user.id,
-        req.body.address.trim()
+        req.body.address.trim(),
       );
     }
 
     const [rows] = await connection.execute(
       "SELECT * FROM user_addresses WHERE id = ? AND user_id = ?",
-      [id, req.user.id]
+      [id, req.user.id],
     );
 
     await connection.commit();
@@ -1479,7 +1784,7 @@ app.put("/api/auth/addresses/:id", authenticateToken, async (req, res) => {
     res.json({
       success: true,
       message: "Cập nhật địa chỉ thành công",
-      data: formatAddress(rows[0]),
+      data: chuanHoaDiaChi(rows[0]),
     });
   } catch (error) {
     await connection.rollback();
@@ -1496,175 +1801,163 @@ app.put("/api/auth/addresses/:id", authenticateToken, async (req, res) => {
 });
 
 // Đặt địa chỉ mặc định
-app.patch(
-  "/api/auth/addresses/:id/default",
-  authenticateToken,
-  async (req, res) => {
-    const id = Number(req.params.id);
+app.patch("/api/auth/addresses/:id/default", xacThucToken, async (req, res) => {
+  const id = Number(req.params.id);
 
-    if (!Number.isSafeInteger(id) || id < 1) {
-      return res.status(400).json({
-        success: false,
-        message: "ID địa chỉ không hợp lệ",
-      });
-    }
+  if (!Number.isSafeInteger(id) || id < 1) {
+    return res.status(400).json({
+      success: false,
+      message: "ID địa chỉ không hợp lệ",
+    });
+  }
 
-    const connection = await pool.getConnection();
+  const connection = await pool.getConnection();
 
-    try {
-      await connection.beginTransaction();
+  try {
+    await connection.beginTransaction();
 
-      const [existingRows] = await connection.execute(
-        "SELECT * FROM user_addresses WHERE id = ? AND user_id = ?",
-        [id, req.user.id]
-      );
+    const [existingRows] = await connection.execute(
+      "SELECT * FROM user_addresses WHERE id = ? AND user_id = ?",
+      [id, req.user.id],
+    );
 
-      if (!existingRows.length) {
-        await connection.rollback();
-
-        return res.status(404).json({
-          success: false,
-          message: "Không tìm thấy địa chỉ",
-        });
-      }
-
-      await connection.execute(
-        "UPDATE user_addresses SET is_default = FALSE WHERE user_id = ?",
-        [req.user.id]
-      );
-
-      await connection.execute(
-        `UPDATE user_addresses
-         SET is_default = TRUE
-         WHERE id = ? AND user_id = ?`,
-        [id, req.user.id]
-      );
-
-      await syncDefaultAddressToProfile(
-        connection,
-        req.user.id,
-        existingRows[0].address
-      );
-
-      const [rows] = await connection.execute(
-        "SELECT * FROM user_addresses WHERE id = ? AND user_id = ?",
-        [id, req.user.id]
-      );
-
-      await connection.commit();
-
-      res.json({
-        success: true,
-        message: "Đã đặt địa chỉ mặc định",
-        data: formatAddress(rows[0]),
-      });
-    } catch (error) {
+    if (!existingRows.length) {
       await connection.rollback();
 
-      console.error("Lỗi đặt địa chỉ mặc định:", error.message);
-
-      res.status(500).json({
+      return res.status(404).json({
         success: false,
-        message: "Không thể đặt địa chỉ mặc định",
+        message: "Không tìm thấy địa chỉ",
       });
-    } finally {
-      connection.release();
     }
+
+    await connection.execute(
+      "UPDATE user_addresses SET is_default = FALSE WHERE user_id = ?",
+      [req.user.id],
+    );
+
+    await connection.execute(
+      `UPDATE user_addresses
+         SET is_default = TRUE
+         WHERE id = ? AND user_id = ?`,
+      [id, req.user.id],
+    );
+
+    await dongBoDiaChiMacDinhVaoHoSo(
+      connection,
+      req.user.id,
+      existingRows[0].address,
+    );
+
+    const [rows] = await connection.execute(
+      "SELECT * FROM user_addresses WHERE id = ? AND user_id = ?",
+      [id, req.user.id],
+    );
+
+    await connection.commit();
+
+    res.json({
+      success: true,
+      message: "Đã đặt địa chỉ mặc định",
+      data: chuanHoaDiaChi(rows[0]),
+    });
+  } catch (error) {
+    await connection.rollback();
+
+    console.error("Lỗi đặt địa chỉ mặc định:", error.message);
+
+    res.status(500).json({
+      success: false,
+      message: "Không thể đặt địa chỉ mặc định",
+    });
+  } finally {
+    connection.release();
   }
-);
+});
 
 // Xóa địa chỉ
-app.delete(
-  "/api/auth/addresses/:id",
-  authenticateToken,
-  async (req, res) => {
-    const id = Number(req.params.id);
+app.delete("/api/auth/addresses/:id", xacThucToken, async (req, res) => {
+  const id = Number(req.params.id);
 
-    if (!Number.isSafeInteger(id) || id < 1) {
-      return res.status(400).json({
+  if (!Number.isSafeInteger(id) || id < 1) {
+    return res.status(400).json({
+      success: false,
+      message: "ID địa chỉ không hợp lệ",
+    });
+  }
+
+  const connection = await pool.getConnection();
+
+  try {
+    await connection.beginTransaction();
+
+    const [existingRows] = await connection.execute(
+      "SELECT * FROM user_addresses WHERE id = ? AND user_id = ?",
+      [id, req.user.id],
+    );
+
+    if (!existingRows.length) {
+      await connection.rollback();
+
+      return res.status(404).json({
         success: false,
-        message: "ID địa chỉ không hợp lệ",
+        message: "Không tìm thấy địa chỉ",
       });
     }
 
-    const connection = await pool.getConnection();
+    const wasDefault = Boolean(existingRows[0].is_default);
 
-    try {
-      await connection.beginTransaction();
+    await connection.execute(
+      "DELETE FROM user_addresses WHERE id = ? AND user_id = ?",
+      [id, req.user.id],
+    );
 
-      const [existingRows] = await connection.execute(
-        "SELECT * FROM user_addresses WHERE id = ? AND user_id = ?",
-        [id, req.user.id]
-      );
-
-      if (!existingRows.length) {
-        await connection.rollback();
-
-        return res.status(404).json({
-          success: false,
-          message: "Không tìm thấy địa chỉ",
-        });
-      }
-
-      const wasDefault = Boolean(existingRows[0].is_default);
-
-      await connection.execute(
-        "DELETE FROM user_addresses WHERE id = ? AND user_id = ?",
-        [id, req.user.id]
-      );
-
-      if (wasDefault) {
-        const [remainingRows] = await connection.execute(
-          `SELECT *
+    if (wasDefault) {
+      const [remainingRows] = await connection.execute(
+        `SELECT *
            FROM user_addresses
            WHERE user_id = ?
            ORDER BY created_at ASC, id ASC
            LIMIT 1`,
-          [req.user.id]
-        );
+        [req.user.id],
+      );
 
-        if (remainingRows.length) {
-          await connection.execute(
-            `UPDATE user_addresses
+      if (remainingRows.length) {
+        await connection.execute(
+          `UPDATE user_addresses
              SET is_default = TRUE
              WHERE id = ? AND user_id = ?`,
-            [remainingRows[0].id, req.user.id]
-          );
+          [remainingRows[0].id, req.user.id],
+        );
 
-          await syncDefaultAddressToProfile(
-            connection,
-            req.user.id,
-            remainingRows[0].address
-          );
-        } else {
-          await syncDefaultAddressToProfile(
-            connection,
-            req.user.id,
-            null
-          );
-        }
+        await dongBoDiaChiMacDinhVaoHoSo(
+          connection,
+          req.user.id,
+          remainingRows[0].address,
+        );
+      } else {
+        await dongBoDiaChiMacDinhVaoHoSo(connection, req.user.id, null);
       }
-
-      await connection.commit();
-
-      res.json({
-        success: true,
-        message: "Xóa địa chỉ thành công",
-      });
-    } catch (error) {
-      await connection.rollback();
-
-      console.error("Lỗi xóa địa chỉ:", error.message);
-
-      res.status(500).json({
-        success: false,
-        message: "Không thể xóa địa chỉ",
-      });
-    } finally {
-      connection.release();
     }
+
+    await connection.commit();
+
+    res.json({
+      success: true,
+      message: "Xóa địa chỉ thành công",
+    });
+  } catch (error) {
+    await connection.rollback();
+
+    console.error("Lỗi xóa địa chỉ:", error.message);
+
+    res.status(500).json({
+      success: false,
+      message: "Không thể xóa địa chỉ",
+    });
+  } finally {
+    connection.release();
   }
-);
+});
 
 // =========================
 // API SẢN PHẨM
@@ -1674,53 +1967,324 @@ app.delete(
 // API ĐƠN HÀNG
 // =========================
 
-app.post("/api/orders", authenticateToken, async (req, res) => {
+// Cart state is private to the authenticated account; prices always come from products.
+app.get("/api/cart", xacThucToken, async (req, res) => {
+  try {
+    const [rows] = await pool.execute(
+      `SELECT p.*, ci.quantity AS cart_quantity
+       FROM user_cart_items ci
+       INNER JOIN products p ON p.id = ci.product_id
+       WHERE ci.user_id = ?
+       ORDER BY ci.created_at ASC, ci.product_id ASC`,
+      [req.user.id],
+    );
+    res.json({
+      success: true,
+      count: rows.length,
+      data: rows.map((row) => ({
+        ...chuanHoaSanPham(row),
+        quantity: Number(row.cart_quantity),
+      })),
+    });
+  } catch (error) {
+    console.error("Lỗi lấy giỏ hàng tài khoản:", error.code || "UNKNOWN");
+    res.status(500).json({ success: false, message: "Không thể tải giỏ hàng" });
+  }
+});
+
+app.put("/api/cart", xacThucToken, async (req, res) => {
+  let connection;
+  try {
+    if (!Array.isArray(req.body?.items) || req.body.items.length > 100) {
+      throw new LoiApiDonHang(
+        400,
+        "Giỏ hàng phải là danh sách tối đa 100 sản phẩm",
+      );
+    }
+    const items = req.body.items.map((item, index) => ({
+      productId: docSoNguyenDuong(
+        item?.product_id,
+        `Mã sản phẩm thứ ${index + 1}`,
+      ),
+      quantity: docSoNguyenDuong(
+        item?.quantity,
+        `Số lượng sản phẩm thứ ${index + 1}`,
+      ),
+    }));
+    if (items.some((item) => item.quantity > 1000000)) {
+      throw new LoiApiDonHang(400, "Số lượng sản phẩm vượt giới hạn cho phép");
+    }
+    if (new Set(items.map((item) => item.productId)).size !== items.length) {
+      throw new LoiApiDonHang(
+        400,
+        "Mỗi sản phẩm chỉ được xuất hiện một lần trong giỏ hàng",
+      );
+    }
+
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+    const productsById = new Map();
+    for (const productId of items
+      .map((item) => item.productId)
+      .sort((a, b) => a - b)) {
+      const [rows] = await connection.execute(
+        "SELECT * FROM products WHERE id = ? FOR UPDATE",
+        [productId],
+      );
+      if (!rows.length)
+        throw new LoiApiDonHang(404, `Không tìm thấy sản phẩm mã ${productId}`);
+      if (!rows[0].active) {
+        throw new LoiApiDonHang(
+          409,
+          `Sản phẩm “${rows[0].name}” hiện không kinh doanh`,
+        );
+      }
+      const requested = items.find((item) => item.productId === productId);
+      if (Number(rows[0].stock) < requested.quantity) {
+        throw new LoiApiDonHang(
+          409,
+          `Sản phẩm “${rows[0].name}” không đủ tồn kho`,
+        );
+      }
+      productsById.set(productId, rows[0]);
+    }
+
+    await connection.execute("DELETE FROM user_cart_items WHERE user_id = ?", [
+      req.user.id,
+    ]);
+    for (const item of items) {
+      await connection.execute(
+        `INSERT INTO user_cart_items (user_id, product_id, quantity)
+         VALUES (?, ?, ?)`,
+        [req.user.id, item.productId, item.quantity],
+      );
+    }
+    await connection.commit();
+
+    res.json({
+      success: true,
+      count: items.length,
+      data: items.map((item) => ({
+        ...chuanHoaSanPham(productsById.get(item.productId)),
+        quantity: item.quantity,
+      })),
+    });
+  } catch (error) {
+    if (connection) {
+      try {
+        await connection.rollback();
+      } catch {
+        /* transaction may already be complete */
+      }
+    }
+    if (error instanceof LoiApiDonHang) {
+      return res
+        .status(error.status)
+        .json({ success: false, message: error.message });
+    }
+    console.error("Lỗi lưu giỏ hàng tài khoản:", error.code || "UNKNOWN");
+    return res
+      .status(500)
+      .json({ success: false, message: "Không thể lưu giỏ hàng" });
+  } finally {
+    connection?.release();
+  }
+});
+
+app.get("/api/checkout/config", async (req, res) => {
+  try {
+    const [rows] = await pool.execute(
+      "SELECT flat_fee FROM shipping_configuration WHERE id = 1 LIMIT 1",
+    );
+    const fee = rows.length ? rows[0].flat_fee : null;
+    res.json({
+      success: true,
+      payment_methods: ["cod"],
+      shipping_fee: fee === null ? null : Number(fee),
+    });
+  } catch (error) {
+    console.error("Lỗi tải cấu hình checkout:", error.code || "UNKNOWN");
+    res.status(500).json({
+      success: false,
+      message: "Không thể tải cấu hình thanh toán và giao hàng",
+    });
+  }
+});
+
+app.post("/api/orders", xacThucTokenTuyChon, async (req, res) => {
   let connection;
   let transactionStarted = false;
+  let idempotencyKey = null;
+  let requestFingerprint = null;
 
   try {
     const body = req.body;
     if (!body || typeof body !== "object" || Array.isArray(body)) {
-      throw new OrderApiError(400, "Dữ liệu đơn hàng không hợp lệ");
+      throw new LoiApiDonHang(400, "Dữ liệu đơn hàng không hợp lệ");
+    }
+    const paymentMethod = body.payment_method;
+    if (paymentMethod !== "cod") {
+      throw new LoiApiDonHang(
+        400,
+        "Phương thức thanh toán không hợp lệ; hiện chỉ hỗ trợ COD",
+      );
     }
 
-    const addressId = parsePositiveInteger(body.address_id, "Địa chỉ nhận hàng");
-    if (!Array.isArray(body.items) || body.items.length < 1 || body.items.length > 100) {
-      throw new OrderApiError(400, "Đơn hàng phải có từ 1 đến 100 sản phẩm");
+    const addressId = req.user
+      ? docSoNguyenDuong(body.address_id, "Địa chỉ nhận hàng")
+      : null;
+    let shippingDetails;
+    if (!req.user) {
+      const guest = body.guest;
+      const recipientName =
+        typeof guest?.recipient_name === "string"
+          ? guest.recipient_name.trim()
+          : "";
+      const recipientPhone =
+        typeof guest?.recipient_phone === "string"
+          ? guest.recipient_phone.trim()
+          : "";
+      const shippingAddress =
+        typeof guest?.shipping_address === "string"
+          ? guest.shipping_address.trim()
+          : "";
+      if (!recipientName || recipientName.length > 100) {
+        throw new LoiApiDonHang(400, "Vui lòng nhập họ tên người nhận hợp lệ");
+      }
+      if (!/^[+\d][+\d\s().-]{5,19}$/.test(recipientPhone)) {
+        throw new LoiApiDonHang(400, "Vui lòng nhập số điện thoại hợp lệ");
+      }
+      if (!shippingAddress || shippingAddress.length > 2000) {
+        throw new LoiApiDonHang(400, "Vui lòng nhập địa chỉ nhận hàng hợp lệ");
+      }
+      shippingDetails = {
+        id: null,
+        recipient_name: recipientName,
+        phone: recipientPhone,
+        address: shippingAddress,
+      };
+    }
+    if (
+      !Array.isArray(body.items) ||
+      body.items.length < 1 ||
+      body.items.length > 100
+    ) {
+      throw new LoiApiDonHang(400, "Đơn hàng phải có từ 1 đến 100 sản phẩm");
     }
 
     const requestedItems = body.items.map((item, index) => {
       if (!item || typeof item !== "object" || Array.isArray(item)) {
-        throw new OrderApiError(400, `Sản phẩm thứ ${index + 1} không hợp lệ`);
+        throw new LoiApiDonHang(400, `Sản phẩm thứ ${index + 1} không hợp lệ`);
       }
-      const productId = parsePositiveInteger(item.product_id, `Mã sản phẩm thứ ${index + 1}`);
-      const quantity = parsePositiveInteger(item.quantity, `Số lượng sản phẩm thứ ${index + 1}`);
+      const productId = docSoNguyenDuong(
+        item.product_id,
+        `Mã sản phẩm thứ ${index + 1}`,
+      );
+      const quantity = docSoNguyenDuong(
+        item.quantity,
+        `Số lượng sản phẩm thứ ${index + 1}`,
+      );
       if (quantity > 1000000) {
-        throw new OrderApiError(400, "Số lượng mỗi sản phẩm vượt giới hạn cho phép");
+        throw new LoiApiDonHang(
+          400,
+          "Số lượng mỗi sản phẩm vượt giới hạn cho phép",
+        );
       }
       return { productId, quantity };
     });
 
     const requestedIds = requestedItems.map((item) => item.productId);
     if (new Set(requestedIds).size !== requestedIds.length) {
-      throw new OrderApiError(400, "Mỗi sản phẩm chỉ được xuất hiện một lần trong đơn hàng");
+      throw new LoiApiDonHang(
+        400,
+        "Mỗi sản phẩm chỉ được xuất hiện một lần trong đơn hàng",
+      );
+    }
+
+    const suppliedIdempotencyKey = req.get("Idempotency-Key");
+    if (
+      typeof suppliedIdempotencyKey !== "string" ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+        suppliedIdempotencyKey,
+      )
+    ) {
+      throw new LoiApiDonHang(400, "Mã yêu cầu đặt hàng không hợp lệ");
+    }
+    idempotencyKey = suppliedIdempotencyKey.toLowerCase();
+    const fingerprintInput = {
+      customer_id: req.user?.id ?? null,
+      address_id: addressId,
+      guest: req.user ? null : shippingDetails,
+      payment_method: paymentMethod,
+      items: requestedItems
+        .slice()
+        .sort((left, right) => left.productId - right.productId),
+    };
+    requestFingerprint = crypto
+      .createHash("sha256")
+      .update(JSON.stringify(fingerprintInput))
+      .digest("hex");
+
+    const [existing] = await pool.execute(
+      `SELECT id, customer_id, user_address_id, recipient_name, recipient_phone,
+              shipping_address, subtotal, shipping_fee, total_amount, status,
+              payment_method, payment_status, created_at, updated_at,
+              idempotency_key, request_fingerprint
+       FROM orders WHERE idempotency_key = ? LIMIT 1`,
+      [idempotencyKey],
+    );
+    if (existing.length) {
+      if (existing[0].request_fingerprint !== requestFingerprint) {
+        throw new LoiApiDonHang(
+          409,
+          "Mã yêu cầu này đã được dùng cho nội dung đơn hàng khác",
+        );
+      }
+      const itemsByOrder = await layChiTietDonHang(pool, [existing[0].id]);
+      return res.status(200).json({
+        success: true,
+        message: "Đơn hàng đã được tạo trước đó",
+        data: {
+          ...chuanHoaDonHang(
+            existing[0],
+            itemsByOrder.get(String(existing[0].id)) || [],
+          ),
+          customer_type:
+            existing[0].customer_id === null ? "guest" : "account",
+        },
+      });
     }
 
     connection = await pool.getConnection();
     await connection.beginTransaction();
     transactionStarted = true;
 
-    const [addressRows] = await connection.execute(
-      `SELECT id, recipient_name, phone, address
-       FROM user_addresses
-       WHERE id = ? AND user_id = ?
-       FOR UPDATE`,
-      [addressId, req.user.id]
+    const [shippingConfiguration] = await connection.execute(
+      "SELECT flat_fee FROM shipping_configuration WHERE id = 1 FOR UPDATE",
     );
-    if (!addressRows.length) {
-      throw new OrderApiError(400, "Địa chỉ nhận hàng không hợp lệ");
+    if (!shippingConfiguration.length || shippingConfiguration[0].flat_fee === null) {
+      throw new LoiApiDonHang(
+        409,
+        "Chưa cấu hình phí vận chuyển chính thức; đơn hàng chưa được tạo",
+      );
     }
-    const address = addressRows[0];
+    const shippingFeeCents = doiSangSoTienXu(
+      String(shippingConfiguration[0].flat_fee),
+    );
+
+    if (req.user) {
+      const [addressRows] = await connection.execute(
+        `SELECT id, recipient_name, phone, address
+         FROM user_addresses
+         WHERE id = ? AND user_id = ?
+         FOR UPDATE`,
+        [addressId, req.user.id],
+      );
+      if (!addressRows.length) {
+        throw new LoiApiDonHang(400, "Địa chỉ nhận hàng không hợp lệ");
+      }
+      shippingDetails = addressRows[0];
+    }
 
     const productsById = new Map();
     for (const productId of [...requestedIds].sort((a, b) => a - b)) {
@@ -1729,25 +2293,33 @@ app.post("/api/orders", authenticateToken, async (req, res) => {
          FROM products
          WHERE id = ?
          FOR UPDATE`,
-        [productId]
+        [productId],
       );
       if (!productRows.length) {
-        throw new OrderApiError(404, `Không tìm thấy sản phẩm mã ${productId}`);
+        throw new LoiApiDonHang(404, `Không tìm thấy sản phẩm mã ${productId}`);
       }
       const product = productRows[0];
       if (!product.active) {
-        throw new OrderApiError(409, `Sản phẩm “${product.name}” hiện không kinh doanh`);
+        throw new LoiApiDonHang(
+          409,
+          `Sản phẩm “${product.name}” hiện không kinh doanh`,
+        );
       }
-      const requested = requestedItems.find((item) => item.productId === productId);
+      const requested = requestedItems.find(
+        (item) => item.productId === productId,
+      );
       if (Number(product.stock) < requested.quantity) {
-        throw new OrderApiError(409, `Sản phẩm “${product.name}” không đủ tồn kho`);
+        throw new LoiApiDonHang(
+          409,
+          `Sản phẩm “${product.name}” không đủ tồn kho`,
+        );
       }
       productsById.set(productId, product);
     }
 
     const orderItems = requestedItems.map(({ productId, quantity }) => {
       const product = productsById.get(productId);
-      const unitPriceCents = toMoneyCents(product.price);
+      const unitPriceCents = doiSangSoTienXu(product.price);
       const lineTotalCents = unitPriceCents * BigInt(quantity);
       return {
         productId,
@@ -1758,10 +2330,14 @@ app.post("/api/orders", authenticateToken, async (req, res) => {
       };
     });
 
-    const subtotalCents = orderItems.reduce((sum, item) => sum + item.lineTotalCents, 0n);
+    const subtotalCents = orderItems.reduce(
+      (sum, item) => sum + item.lineTotalCents,
+      0n,
+    );
+    const totalCents = subtotalCents + shippingFeeCents;
     const maxOrderCents = 99999999999999n; // DECIMAL(14,2)
-    if (subtotalCents > maxOrderCents) {
-      throw new OrderApiError(400, "Tổng tiền đơn hàng vượt giới hạn cho phép");
+    if (totalCents > maxOrderCents) {
+      throw new LoiApiDonHang(400, "Tổng tiền đơn hàng vượt giới hạn cho phép");
     }
 
     for (const item of orderItems) {
@@ -1769,28 +2345,38 @@ app.post("/api/orders", authenticateToken, async (req, res) => {
         `UPDATE products
          SET stock = stock - ?
          WHERE id = ? AND active = 1 AND stock >= ?`,
-        [item.quantity, item.productId, item.quantity]
+        [item.quantity, item.productId, item.quantity],
       );
       if (stockResult.affectedRows !== 1) {
-        throw new OrderApiError(409, `Tồn kho sản phẩm “${item.product.name}” vừa thay đổi`);
+        throw new LoiApiDonHang(
+          409,
+          `Tồn kho sản phẩm “${item.product.name}” vừa thay đổi`,
+        );
       }
     }
 
-    const subtotal = fromMoneyCents(subtotalCents);
+    const subtotal = doiTuSoTienXu(subtotalCents);
+    const shippingFee = doiTuSoTienXu(shippingFeeCents);
+    const totalAmount = doiTuSoTienXu(totalCents);
     const [orderResult] = await connection.execute(
       `INSERT INTO orders
         (customer_id, user_address_id, recipient_name, recipient_phone,
-         shipping_address, subtotal, shipping_fee, total_amount, status)
-       VALUES (?, ?, ?, ?, ?, ?, NULL, ?, 'pending_confirmation')`,
+         shipping_address, subtotal, shipping_fee, total_amount, status,
+         payment_method, payment_status, idempotency_key, request_fingerprint)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending_confirmation', ?, 'unpaid', ?, ?)`,
       [
-        req.user.id,
-        address.id,
-        address.recipient_name,
-        address.phone,
-        address.address,
+        req.user ? req.user.id : null,
+        shippingDetails.id,
+        shippingDetails.recipient_name,
+        shippingDetails.phone,
+        shippingDetails.address,
         subtotal,
-        subtotal,
-      ]
+        shippingFee,
+        totalAmount,
+        paymentMethod,
+        idempotencyKey,
+        requestFingerprint,
+      ],
     );
 
     const orderId = orderResult.insertId;
@@ -1806,10 +2392,17 @@ app.post("/api/orders", authenticateToken, async (req, res) => {
           item.product.name,
           item.product.category,
           item.product.image || null,
-          fromMoneyCents(item.unitPriceCents),
+          doiTuSoTienXu(item.unitPriceCents),
           item.quantity,
-          fromMoneyCents(item.lineTotalCents),
-        ]
+          doiTuSoTienXu(item.lineTotalCents),
+        ],
+      );
+    }
+
+    if (req.user) {
+      await connection.execute(
+        "DELETE FROM user_cart_items WHERE user_id = ?",
+        [req.user.id],
       );
     }
 
@@ -1822,14 +2415,18 @@ app.post("/api/orders", authenticateToken, async (req, res) => {
       message: "Đơn hàng đã được tạo và đang chờ xác nhận",
       data: {
         id: String(orderId),
-        user_address_id: Number(address.id),
-        recipient_name: address.recipient_name,
-        recipient_phone: address.phone,
-        shipping_address: address.address,
+        customer_type: req.user ? "account" : "guest",
+        user_address_id:
+          shippingDetails.id === null ? null : Number(shippingDetails.id),
+        recipient_name: shippingDetails.recipient_name,
+        recipient_phone: shippingDetails.phone,
+        shipping_address: shippingDetails.address,
         subtotal: Number(subtotal),
-        shipping_fee: null,
-        total_amount: Number(subtotal),
+        shipping_fee: Number(shippingFee),
+        total_amount: Number(totalAmount),
         status: "pending_confirmation",
+        payment_method: paymentMethod,
+        payment_status: "unpaid",
         created_at: createdAt,
         updated_at: createdAt,
         items: orderItems.map((item) => ({
@@ -1837,109 +2434,376 @@ app.post("/api/orders", authenticateToken, async (req, res) => {
           product_name: item.product.name,
           product_category: item.product.category,
           product_image: item.product.image || null,
-          unit_price: Number(fromMoneyCents(item.unitPriceCents)),
+          unit_price: Number(doiTuSoTienXu(item.unitPriceCents)),
           quantity: item.quantity,
-          line_total: Number(fromMoneyCents(item.lineTotalCents)),
+          line_total: Number(doiTuSoTienXu(item.lineTotalCents)),
         })),
       },
     });
   } catch (error) {
     if (transactionStarted && connection) {
-      try { await connection.rollback(); } catch { /* kết nối có thể đã đóng */ }
+      try {
+        await connection.rollback();
+      } catch {
+        /* kết nối có thể đã đóng */
+      }
     }
-    if (error instanceof OrderApiError) {
-      return res.status(error.status).json({ success: false, message: error.message });
+    if (error instanceof LoiApiDonHang) {
+      return res
+        .status(error.status)
+        .json({ success: false, message: error.message });
+    }
+    if (error.code === "ER_DUP_ENTRY" && idempotencyKey) {
+      try {
+        const [existing] = await pool.execute(
+          `SELECT id, customer_id, user_address_id, recipient_name, recipient_phone,
+                  shipping_address, subtotal, shipping_fee, total_amount, status,
+                  payment_method, payment_status, created_at, updated_at,
+                  idempotency_key, request_fingerprint
+           FROM orders WHERE idempotency_key = ? LIMIT 1`,
+          [idempotencyKey],
+        );
+        if (
+          existing.length &&
+          existing[0].request_fingerprint === requestFingerprint
+        ) {
+          const itemsByOrder = await layChiTietDonHang(pool, [existing[0].id]);
+          return res.status(200).json({
+            success: true,
+            message: "Đơn hàng đã được tạo trước đó",
+            data: {
+              ...chuanHoaDonHang(
+                existing[0],
+                itemsByOrder.get(String(existing[0].id)) || [],
+              ),
+              customer_type:
+                existing[0].customer_id === null ? "guest" : "account",
+            },
+          });
+        }
+        if (existing.length) {
+          return res.status(409).json({
+            success: false,
+            message: "Mã yêu cầu này đã được dùng cho nội dung đơn hàng khác",
+          });
+        }
+      } catch (lookupError) {
+        console.error(
+          "Lỗi kiểm tra mã yêu cầu đặt hàng:",
+          lookupError.code || "UNKNOWN",
+        );
+      }
     }
     console.error("Lỗi tạo đơn hàng:", error.code || "UNKNOWN");
-    return res.status(500).json({ success: false, message: "Không thể tạo đơn hàng" });
+    return res
+      .status(500)
+      .json({ success: false, message: "Không thể tạo đơn hàng" });
   } finally {
     connection?.release();
   }
 });
 
-app.get("/api/orders", authenticateToken, async (req, res) => {
+app.get("/api/orders", xacThucToken, async (req, res) => {
   try {
-    const page = req.query.page === undefined ? 1 : parsePositiveInteger(req.query.page, "Số trang");
-    const limit = req.query.limit === undefined ? 20 : parsePositiveInteger(req.query.limit, "Số lượng mỗi trang");
-    if (limit > 50) throw new OrderApiError(400, "Số đơn hàng mỗi trang tối đa là 50");
+    const page =
+      req.query.page === undefined
+        ? 1
+        : docSoNguyenDuong(req.query.page, "Số trang");
+    const limit =
+      req.query.limit === undefined
+        ? 20
+        : docSoNguyenDuong(req.query.limit, "Số lượng mỗi trang");
+    if (limit > 50)
+      throw new LoiApiDonHang(400, "Số đơn hàng mỗi trang tối đa là 50");
 
     const status = req.query.status;
     if (status !== undefined && !ORDER_STATUSES.has(status)) {
-      throw new OrderApiError(400, "Trạng thái đơn hàng không hợp lệ");
+      throw new LoiApiDonHang(400, "Trạng thái đơn hàng không hợp lệ");
     }
 
     const whereStatus = status ? " AND status = ?" : "";
     const values = status ? [req.user.id, status] : [req.user.id];
     const [countRows] = await pool.execute(
       `SELECT COUNT(*) AS total FROM orders WHERE customer_id = ?${whereStatus}`,
-      values
+      values,
     );
     const offset = (page - 1) * limit;
-    if (!Number.isSafeInteger(offset)) throw new OrderApiError(400, "Số trang quá lớn");
+    if (!Number.isSafeInteger(offset))
+      throw new LoiApiDonHang(400, "Số trang quá lớn");
     const [orders] = await pool.execute(
       `SELECT id, user_address_id, recipient_name, recipient_phone, shipping_address,
-              subtotal, shipping_fee, total_amount, status, created_at, updated_at
+              subtotal, shipping_fee, total_amount, status, payment_method,
+              payment_status, created_at, updated_at
        FROM orders
        WHERE customer_id = ?${whereStatus}
        ORDER BY created_at DESC, id DESC
        LIMIT ? OFFSET ?`,
-      [...values, limit, offset]
+      [...values, limit, offset],
     );
-    const itemsByOrder = await loadOrderItems(pool, orders.map((order) => order.id));
+    const itemsByOrder = await layChiTietDonHang(
+      pool,
+      orders.map((order) => order.id),
+    );
 
     res.json({
       success: true,
       count: Number(countRows[0].total),
       page,
       limit,
-      data: orders.map((order) => formatOrder(order, itemsByOrder.get(String(order.id)) || [])),
+      data: orders.map((order) =>
+        chuanHoaDonHang(order, itemsByOrder.get(String(order.id)) || []),
+      ),
     });
   } catch (error) {
-    if (error instanceof OrderApiError) {
-      return res.status(error.status).json({ success: false, message: error.message });
+    if (error instanceof LoiApiDonHang) {
+      return res
+        .status(error.status)
+        .json({ success: false, message: error.message });
     }
     console.error("Lỗi lấy danh sách đơn hàng:", error.code || "UNKNOWN");
-    return res.status(500).json({ success: false, message: "Không thể lấy danh sách đơn hàng" });
+    return res
+      .status(500)
+      .json({ success: false, message: "Không thể lấy danh sách đơn hàng" });
   }
 });
 
-app.get("/api/orders/:id", authenticateToken, async (req, res) => {
+app.get("/api/orders/:id", xacThucToken, async (req, res) => {
   try {
-    const orderId = parsePositiveInteger(req.params.id, "Mã đơn hàng");
+    const orderId = docSoNguyenDuong(req.params.id, "Mã đơn hàng");
     const [orders] = await pool.execute(
       `SELECT id, user_address_id, recipient_name, recipient_phone, shipping_address,
-              subtotal, shipping_fee, total_amount, status, created_at, updated_at
+              subtotal, shipping_fee, total_amount, status, payment_method,
+              payment_status, created_at, updated_at
        FROM orders
        WHERE id = ? AND customer_id = ?
        LIMIT 1`,
-      [orderId, req.user.id]
+      [orderId, req.user.id],
     );
     if (!orders.length) {
-      return res.status(404).json({ success: false, message: "Không tìm thấy đơn hàng" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Không tìm thấy đơn hàng" });
     }
 
-    const itemsByOrder = await loadOrderItems(pool, [orders[0].id]);
+    const itemsByOrder = await layChiTietDonHang(pool, [orders[0].id]);
     res.json({
       success: true,
-      data: formatOrder(orders[0], itemsByOrder.get(String(orders[0].id)) || []),
+      data: chuanHoaDonHang(
+        orders[0],
+        itemsByOrder.get(String(orders[0].id)) || [],
+      ),
     });
   } catch (error) {
-    if (error instanceof OrderApiError) {
-      return res.status(error.status).json({ success: false, message: error.message });
+    if (error instanceof LoiApiDonHang) {
+      return res
+        .status(error.status)
+        .json({ success: false, message: error.message });
     }
     console.error("Lỗi lấy chi tiết đơn hàng:", error.code || "UNKNOWN");
-    res.status(500).json({ success: false, message: "Không thể lấy chi tiết đơn hàng" });
+    res
+      .status(500)
+      .json({ success: false, message: "Không thể lấy chi tiết đơn hàng" });
   }
 });
+
+app.post("/api/orders/lookup", gioiHanTraCuuDonKhach, async (req, res) => {
+  try {
+    const orderId = docSoNguyenDuong(req.body?.order_id, "Mã đơn hàng");
+    const phone =
+      typeof req.body?.phone === "string" ? req.body.phone.trim() : "";
+    if (!/^[+\d][+\d\s().-]{5,19}$/.test(phone)) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Không tìm thấy đơn hàng phù hợp" });
+    }
+
+    const [orders] = await pool.execute(
+      `SELECT id, customer_id, user_address_id, recipient_name, recipient_phone,
+              shipping_address, subtotal, shipping_fee, total_amount, status,
+              payment_method, payment_status, created_at, updated_at
+       FROM orders
+       WHERE id = ? AND customer_id IS NULL AND recipient_phone = ?
+       LIMIT 1`,
+      [orderId, phone],
+    );
+    if (!orders.length) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Không tìm thấy đơn hàng phù hợp" });
+    }
+
+    const itemsByOrder = await layChiTietDonHang(pool, [orders[0].id]);
+    return res.json({
+      success: true,
+      data: chuanHoaDonHang(
+        orders[0],
+        itemsByOrder.get(String(orders[0].id)) || [],
+      ),
+    });
+  } catch (error) {
+    if (error instanceof LoiApiDonHang) {
+      return res
+        .status(error.status)
+        .json({ success: false, message: "Thông tin tra cứu không hợp lệ" });
+    }
+    console.error("Lỗi tra cứu đơn khách:", error.code || "UNKNOWN");
+    return res
+      .status(500)
+      .json({ success: false, message: "Không thể tra cứu đơn hàng" });
+  }
+});
+
+app.get(
+  "/api/admin/orders",
+  xacThucToken,
+  yeuCauQuyenQuanTri,
+  async (req, res) => {
+    try {
+      const page =
+        req.query.page === undefined
+          ? 1
+          : docSoNguyenDuong(req.query.page, "Số trang");
+      const limit =
+        req.query.limit === undefined
+          ? 20
+          : docSoNguyenDuong(req.query.limit, "Số lượng mỗi trang");
+      if (limit > 50)
+        throw new LoiApiDonHang(400, "Số đơn hàng mỗi trang tối đa là 50");
+
+      const conditions = [];
+      const values = [];
+      if (req.query.status !== undefined) {
+        if (!ORDER_STATUSES.has(req.query.status))
+          throw new LoiApiDonHang(400, "Trạng thái đơn hàng không hợp lệ");
+        conditions.push("status = ?");
+        values.push(req.query.status);
+      }
+      if (req.query.customer_type === "guest")
+        conditions.push("customer_id IS NULL");
+      else if (req.query.customer_type === "account")
+        conditions.push("customer_id IS NOT NULL");
+      else if (
+        req.query.customer_type !== undefined &&
+        req.query.customer_type !== "all"
+      ) {
+        throw new LoiApiDonHang(400, "Loại khách hàng không hợp lệ");
+      }
+
+      const where = conditions.length
+        ? ` WHERE ${conditions.join(" AND ")}`
+        : "";
+      const [countRows] = await pool.execute(
+        `SELECT COUNT(*) AS total FROM orders${where}`,
+        values,
+      );
+      const offset = (page - 1) * limit;
+      if (!Number.isSafeInteger(offset))
+        throw new LoiApiDonHang(400, "Số trang quá lớn");
+      const [orders] = await pool.execute(
+        `SELECT id, customer_id, user_address_id, recipient_name, recipient_phone,
+              shipping_address, subtotal, shipping_fee, total_amount, status,
+                payment_method, payment_status, created_at, updated_at
+       FROM orders${where}
+       ORDER BY created_at DESC, id DESC
+       LIMIT ? OFFSET ?`,
+        [...values, limit, offset],
+      );
+      const itemsByOrder = await layChiTietDonHang(
+        pool,
+        orders.map((order) => order.id),
+      );
+      return res.json({
+        success: true,
+        count: Number(countRows[0].total),
+        page,
+        limit,
+        data: orders.map((order) => ({
+          ...chuanHoaDonHang(order, itemsByOrder.get(String(order.id)) || []),
+          customer_id:
+            order.customer_id === null ? null : Number(order.customer_id),
+          customer_type: order.customer_id === null ? "guest" : "account",
+        })),
+      });
+    } catch (error) {
+      if (error instanceof LoiApiDonHang) {
+        return res
+          .status(error.status)
+          .json({ success: false, message: error.message });
+      }
+      console.error("Lỗi lấy danh sách đơn Admin:", error.code || "UNKNOWN");
+      return res
+        .status(500)
+        .json({ success: false, message: "Không thể lấy danh sách đơn hàng" });
+    }
+  },
+);
+
+app.patch(
+  "/api/admin/orders/:id/status",
+  xacThucToken,
+  yeuCauQuyenQuanTri,
+  async (req, res) => {
+    try {
+      const orderId = docSoNguyenDuong(req.params.id, "Mã đơn hàng");
+      const { status } = req.body || {};
+      if (!ORDER_STATUSES.has(status))
+        throw new LoiApiDonHang(400, "Trạng thái đơn hàng không hợp lệ");
+      const [update] = await pool.execute(
+        "UPDATE orders SET status = ? WHERE id = ?",
+        [status, orderId],
+      );
+      if (update.affectedRows !== 1) {
+        const [rows] = await pool.execute(
+          "SELECT id FROM orders WHERE id = ?",
+          [orderId],
+        );
+        if (!rows.length)
+          throw new LoiApiDonHang(404, "Không tìm thấy đơn hàng");
+      }
+      const [orders] = await pool.execute(
+        `SELECT id, customer_id, user_address_id, recipient_name, recipient_phone,
+              shipping_address, subtotal, shipping_fee, total_amount, status,
+                payment_method, payment_status, created_at, updated_at
+       FROM orders WHERE id = ? LIMIT 1`,
+        [orderId],
+      );
+      const itemsByOrder = await layChiTietDonHang(pool, [orderId]);
+      return res.json({
+        success: true,
+        data: {
+          ...chuanHoaDonHang(
+            orders[0],
+            itemsByOrder.get(String(orderId)) || [],
+          ),
+          customer_id:
+            orders[0].customer_id === null
+              ? null
+              : Number(orders[0].customer_id),
+          customer_type: orders[0].customer_id === null ? "guest" : "account",
+        },
+      });
+    } catch (error) {
+      if (error instanceof LoiApiDonHang) {
+        return res
+          .status(error.status)
+          .json({ success: false, message: error.message });
+      }
+      console.error("Lỗi cập nhật trạng thái đơn:", error.code || "UNKNOWN");
+      return res
+        .status(500)
+        .json({ success: false, message: "Không thể cập nhật đơn hàng" });
+    }
+  },
+);
 
 // Lấy danh sách sản phẩm
 app.get("/api/products", async (req, res) => {
   try {
     const [rows] = await pool.query(
-      "SELECT * FROM products ORDER BY created_at DESC"
+      "SELECT * FROM products ORDER BY created_at DESC",
     );
 
-    const products = rows.map(formatProduct);
+    const products = rows.map(chuanHoaSanPham);
 
     res.json({
       success: true,
@@ -1970,7 +2834,7 @@ app.get("/api/products/:id/reviews", async (req, res) => {
 
     const [products] = await pool.execute(
       "SELECT id FROM products WHERE id = ?",
-      [productId]
+      [productId],
     );
 
     if (!products.length) {
@@ -1997,15 +2861,13 @@ app.get("/api/products/:id/reviews", async (req, res) => {
         ) AS mediaCount
        FROM product_reviews
        WHERE product_id = ?`,
-      [productId]
+      [productId],
     );
 
     const summaryRow = summaryRows[0];
 
     const summary = {
-      averageRating: Number(
-        Number(summaryRow.averageRating).toFixed(1)
-      ),
+      averageRating: Number(Number(summaryRow.averageRating).toFixed(1)),
       totalReviews: Number(summaryRow.totalReviews),
       ratingCounts: {
         5: Number(summaryRow.fiveStars || 0),
@@ -2029,10 +2891,10 @@ app.get("/api/products/:id/reviews", async (req, res) => {
        FROM product_reviews
        WHERE product_id = ?
        ORDER BY created_at DESC, id DESC`,
-      [productId]
+      [productId],
     );
 
-    const reviews = reviewRows.map(formatReview);
+    const reviews = reviewRows.map(chuanHoaDanhGia);
 
     res.json({
       success: true,
@@ -2052,191 +2914,202 @@ app.get("/api/products/:id/reviews", async (req, res) => {
 });
 
 // Thêm sản phẩm
-app.post("/api/products", async (req, res) => {
-  try {
-    const errors = validateProduct(req.body);
+app.post(
+  "/api/products",
+  xacThucToken,
+  yeuCauQuyenQuanTri,
+  async (req, res) => {
+    try {
+      const errors = kiemTraDuLieuSanPham(req.body);
 
-    if (errors.length) {
-      return res.status(400).json({
-        success: false,
-        message: errors.join("; "),
-      });
-    }
+      if (errors.length) {
+        return res.status(400).json({
+          success: false,
+          message: errors.join("; "),
+        });
+      }
 
-    const product = getProductValues(req.body);
+      const product = layGiaTriSanPham(req.body);
 
-    const [result] = await pool.execute(
-      `INSERT INTO products
+      const [result] = await pool.execute(
+        `INSERT INTO products
         (name, description, price, category, image, stock, featured, active)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        product.name,
-        product.description,
-        product.price,
-        product.category,
-        product.image,
-        product.stock,
-        product.featured,
-        product.active,
-      ]
-    );
-
-    const [rows] = await pool.execute(
-      "SELECT * FROM products WHERE id = ?",
-      [result.insertId]
-    );
-
-    res.status(201).json({
-      success: true,
-      message: "Thêm sản phẩm thành công",
-      data: formatProduct(rows[0]),
-    });
-  } catch (error) {
-    console.error("Lỗi thêm sản phẩm:", error.message);
-
-    res.status(500).json({
-      success: false,
-      message: "Không thể thêm sản phẩm",
-    });
-  }
-});
-
-// Cập nhật sản phẩm
-app.put("/api/products/:id", async (req, res) => {
-  try {
-    const id = Number(req.params.id);
-
-    if (!Number.isSafeInteger(id) || id < 1) {
-      return res.status(400).json({
-        success: false,
-        message: "ID sản phẩm không hợp lệ",
-      });
-    }
-
-    const errors = validateProduct(req.body, true);
-
-    if (errors.length) {
-      return res.status(400).json({
-        success: false,
-        message: errors.join("; "),
-      });
-    }
-
-    const updates = allowedFields.filter(
-      (field) => req.body[field] !== undefined
-    );
-
-    if (!updates.length) {
-      return res.status(400).json({
-        success: false,
-        message: "Không có thông tin cần cập nhật",
-      });
-    }
-
-    const values = updates.map((field) => {
-      const value = req.body[field];
-
-      if (field === "name" || field === "category") {
-        return value.trim();
-      }
-
-      if (field === "price" || field === "stock") {
-        return Number(value);
-      }
-
-      if (field === "featured" || field === "active") {
-        return value === true || value === 1;
-      }
-
-      return value;
-    });
-
-    const setClause = updates
-      .map((field) => `\`${field}\` = ?`)
-      .join(", ");
-
-    const [result] = await pool.execute(
-      `UPDATE products SET ${setClause} WHERE id = ?`,
-      [...values, id]
-    );
-
-    if (result.affectedRows === 0) {
-      const [existing] = await pool.execute(
-        "SELECT id FROM products WHERE id = ?",
-        [id]
+        [
+          product.name,
+          product.description,
+          product.price,
+          product.category,
+          product.image,
+          product.stock,
+          product.featured,
+          product.active,
+        ],
       );
 
-      if (!existing.length) {
+      const [rows] = await pool.execute("SELECT * FROM products WHERE id = ?", [
+        result.insertId,
+      ]);
+
+      res.status(201).json({
+        success: true,
+        message: "Thêm sản phẩm thành công",
+        data: chuanHoaSanPham(rows[0]),
+      });
+    } catch (error) {
+      console.error("Lỗi thêm sản phẩm:", error.message);
+
+      res.status(500).json({
+        success: false,
+        message: "Không thể thêm sản phẩm",
+      });
+    }
+  },
+);
+
+// Cập nhật sản phẩm
+app.put(
+  "/api/products/:id",
+  xacThucToken,
+  yeuCauQuyenQuanTri,
+  async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+
+      if (!Number.isSafeInteger(id) || id < 1) {
+        return res.status(400).json({
+          success: false,
+          message: "ID sản phẩm không hợp lệ",
+        });
+      }
+
+      const errors = kiemTraDuLieuSanPham(req.body, true);
+
+      if (errors.length) {
+        return res.status(400).json({
+          success: false,
+          message: errors.join("; "),
+        });
+      }
+
+      const updates = allowedFields.filter(
+        (field) => req.body[field] !== undefined,
+      );
+
+      if (!updates.length) {
+        return res.status(400).json({
+          success: false,
+          message: "Không có thông tin cần cập nhật",
+        });
+      }
+
+      const values = updates.map((field) => {
+        const value = req.body[field];
+
+        if (field === "name" || field === "category") {
+          return value.trim();
+        }
+
+        if (field === "price" || field === "stock") {
+          return Number(value);
+        }
+
+        if (field === "featured" || field === "active") {
+          return value === true || value === 1;
+        }
+
+        return value;
+      });
+
+      const setClause = updates.map((field) => `\`${field}\` = ?`).join(", ");
+
+      const [result] = await pool.execute(
+        `UPDATE products SET ${setClause} WHERE id = ?`,
+        [...values, id],
+      );
+
+      if (result.affectedRows === 0) {
+        const [existing] = await pool.execute(
+          "SELECT id FROM products WHERE id = ?",
+          [id],
+        );
+
+        if (!existing.length) {
+          return res.status(404).json({
+            success: false,
+            message: "Không tìm thấy sản phẩm",
+          });
+        }
+      }
+
+      const [rows] = await pool.execute("SELECT * FROM products WHERE id = ?", [
+        id,
+      ]);
+
+      res.json({
+        success: true,
+        message: "Cập nhật sản phẩm thành công",
+        data: chuanHoaSanPham(rows[0]),
+      });
+    } catch (error) {
+      console.error("Lỗi cập nhật sản phẩm:", error.message);
+
+      res.status(500).json({
+        success: false,
+        message: "Không thể cập nhật sản phẩm",
+      });
+    }
+  },
+);
+
+// Xóa sản phẩm
+app.delete(
+  "/api/products/:id",
+  xacThucToken,
+  yeuCauQuyenQuanTri,
+  async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+
+      if (!Number.isSafeInteger(id) || id < 1) {
+        return res.status(400).json({
+          success: false,
+          message: "ID sản phẩm không hợp lệ",
+        });
+      }
+
+      const [result] = await pool.execute("DELETE FROM products WHERE id = ?", [
+        id,
+      ]);
+
+      if (result.affectedRows === 0) {
         return res.status(404).json({
           success: false,
           message: "Không tìm thấy sản phẩm",
         });
       }
-    }
 
-    const [rows] = await pool.execute(
-      "SELECT * FROM products WHERE id = ?",
-      [id]
-    );
+      res.json({
+        success: true,
+        message: "Xóa sản phẩm thành công",
+      });
+    } catch (error) {
+      console.error("Lỗi xóa sản phẩm:", error.message);
 
-    res.json({
-      success: true,
-      message: "Cập nhật sản phẩm thành công",
-      data: formatProduct(rows[0]),
-    });
-  } catch (error) {
-    console.error("Lỗi cập nhật sản phẩm:", error.message);
-
-    res.status(500).json({
-      success: false,
-      message: "Không thể cập nhật sản phẩm",
-    });
-  }
-});
-
-// Xóa sản phẩm
-app.delete("/api/products/:id", async (req, res) => {
-  try {
-    const id = Number(req.params.id);
-
-    if (!Number.isSafeInteger(id) || id < 1) {
-      return res.status(400).json({
+      res.status(500).json({
         success: false,
-        message: "ID sản phẩm không hợp lệ",
+        message: "Không thể xóa sản phẩm",
       });
     }
-
-    const [result] = await pool.execute(
-      "DELETE FROM products WHERE id = ?",
-      [id]
-    );
-
-    if (result.affectedRows === 0) {
-      return res.status(404).json({
-        success: false,
-        message: "Không tìm thấy sản phẩm",
-      });
-    }
-
-    res.json({
-      success: true,
-      message: "Xóa sản phẩm thành công",
-    });
-  } catch (error) {
-    console.error("Lỗi xóa sản phẩm:", error.message);
-
-    res.status(500).json({
-      success: false,
-      message: "Không thể xóa sản phẩm",
-    });
-  }
-});
+  },
+);
 
 // =========================
 // KHỞI ĐỘNG BACKEND
 // =========================
 
-async function startServer() {
+// Kiểm tra kết nối dữ liệu rồi khởi chạy máy chủ HTTP.
+async function khoiDongMayChu() {
   try {
     if (!process.env.DB_PASSWORD) {
       throw new Error("Chưa cấu hình DB_PASSWORD trong server/.env");
@@ -2250,7 +3123,14 @@ async function startServer() {
 
     try {
       await connection.ping();
+      const [tableRows] = await boKetNoiGoc.query("SHOW TABLES");
+      const tableNames = tableRows.map((row) => Object.values(row)[0]);
+      coSoDuLieuDungTenViet =
+        tableNames.includes("san_pham") && !tableNames.includes("products");
       console.log("Đã kết nối MySQL thành công!");
+      console.log(
+        `Schema database: ${coSoDuLieuDungTenViet ? "định danh tiếng Việt" : "định danh hiện có"}`,
+      );
     } finally {
       connection.release();
     }
@@ -2264,4 +3144,4 @@ async function startServer() {
   }
 }
 
-startServer();
+khoiDongMayChu();
