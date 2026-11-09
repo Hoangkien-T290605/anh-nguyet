@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#7041a6" />
+    <link rel="stylesheet" href="./site.css" />
+    <link rel="stylesheet" href="./admin.css" />
+    <title>Quản lý sản phẩm | Ánh Nguyệt</title>
+  </head>
+  <body data-admin-page="products">
+    <div id="admin-gate" class="admin-gate" role="status">Đang xác minh quyền quản trị...</div>
+    <div id="admin-app" class="admin-app" hidden>
+      <aside id="admin-sidebar" class="admin-sidebar"></aside>
+      <div class="admin-main-column">
+        <header id="admin-topbar" class="admin-topbar"></header>
+        <main id="admin-content" class="admin-content">
+          <section class="admin-page-heading">
+            <span>DANH MỤC KINH DOANH</span>
+            <h1>Quản lý sản phẩm</h1>
+            <p>Thông tin được tải từ API sản phẩm hiện có.</p>
+          </section>
+          <section class="admin-products-panel" aria-label="Danh sách sản phẩm">
+            <div class="admin-products-toolbar">
+              <label class="admin-product-search">Tìm sản phẩm
+                <input type="search" data-product-search placeholder="Tên, mã hoặc danh mục" autocomplete="off" />
+              </label>
+              <label>Danh mục
+                <select data-product-category><option value="">Tất cả danh mục</option></select>
+              </label>
+              <label>Trạng thái
+                <select data-product-status>
+                  <option value="all">Tất cả trạng thái</option>
+                  <option value="active">Đang kinh doanh</option>
+                  <option value="inactive">Ngừng kinh doanh</option>
+                </select>
+              </label>
+              <button class="admin-primary-button admin-product-add" type="button" data-product-add>+ Thêm sản phẩm</button>
+            </div>
+            <p class="admin-products-message" data-products-message role="status" aria-live="polite">Đang tải sản phẩm...</p>
+            <div class="admin-products-table-wrap" data-products-table-wrap hidden>
+              <table class="admin-products-table">
+                <thead><tr><th>Ảnh</th><th>Mã</th><th>Sản phẩm</th><th>Danh mục</th><th>Giá bán</th><th>Tồn kho</th><th>Trạng thái</th><th>Thao tác</th></tr></thead>
+                <tbody data-products-rows></tbody>
+              </table>
+            </div>
+            <nav class="admin-products-pagination" data-products-pagination aria-label="Phân trang sản phẩm" hidden></nav>
+          </section>
+        </main>
+      </div>
+    </div>
+
+    <dialog class="admin-product-dialog" data-product-dialog aria-labelledby="product-dialog-heading">
+      <form class="admin-product-form" data-product-form>
+        <div class="admin-product-dialog-heading">
+          <div><span class="admin-eyebrow">THÔNG TIN KINH DOANH</span><h2 id="product-dialog-heading" data-product-dialog-title>Thêm sản phẩm</h2></div>
+          <button class="admin-product-close" type="button" data-product-close aria-label="Đóng biểu mẫu">×</button>
+        </div>
+        <p class="admin-product-form-message" data-product-form-message role="alert" hidden></p>
+        <input type="hidden" name="id" />
+        <div class="admin-product-form-grid">
+          <label class="admin-product-field-wide">Tên sản phẩm
+            <input name="name" maxlength="255" required />
+          </label>
+          <label>Danh mục
+            <input name="category" list="admin-product-categories" maxlength="100" required />
+            <datalist id="admin-product-categories"></datalist>
+          </label>
+          <label>Giá bán (đ)
+            <input name="price" type="number" min="0" step="0.01" required />
+          </label>
+          <label>Tồn kho
+            <input name="stock" type="number" min="0" step="1" required />
+          </label>
+          <label class="admin-product-field-wide">Mô tả
+            <textarea name="description" rows="4"></textarea>
+          </label>
+          <label class="admin-product-field-wide">Ảnh sản phẩm — tên tệp hiện có hoặc URL ảnh
+            <input name="image" type="text" maxlength="2048" placeholder="ten-anh.png hoặc https://..." autocomplete="off" />
+          </label>
+          <div class="admin-product-preview-wrap admin-product-field-wide">
+            <span>Xem trước</span>
+            <div class="admin-product-preview" data-product-image-preview><span data-product-image-empty>Ảnh chưa được thiết lập</span><img data-product-preview-image alt="Xem trước ảnh sản phẩm" hidden /></div>
+          </div>
+          <label class="admin-product-check"><input name="active" type="checkbox" checked /> Đang kinh doanh</label>
+          <label class="admin-product-check"><input name="featured" type="checkbox" /> Sản phẩm nổi bật</label>
+        </div>
+        <div class="admin-product-form-actions">
+          <button class="admin-secondary-button" type="button" data-product-close>Hủy</button>
+          <button class="admin-primary-button" type="submit" data-product-save>Lưu sản phẩm</button>
+        </div>
+      </form>
+    </dialog>
+    <script src="./config.js"></script>
+    <script type="module" src="./src/js/admin/main.js"></script>
+  </body>
+</html>
