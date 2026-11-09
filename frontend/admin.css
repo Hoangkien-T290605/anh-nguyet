@@ -579,6 +579,65 @@ html[data-theme="dark"] .admin-module-state {
   box-shadow: 0 7px 22px #30243b0a;
 }
 
+.admin-category-toolbar {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(240px, 2fr);
+  align-items: end;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.admin-category-search {
+  display: grid;
+  gap: 7px;
+  color: var(--admin-text);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.admin-category-search input {
+  width: 100%;
+  min-height: 40px;
+  padding: 9px 11px;
+  color: var(--admin-text);
+  background: var(--admin-background);
+  border: 1px solid var(--admin-border);
+  border-radius: 8px;
+  font: inherit;
+  font-size: 12px;
+}
+
+.admin-category-search input:focus-visible {
+  outline: 3px solid #b993e288;
+  outline-offset: 1px;
+}
+
+.admin-category-note {
+  margin: 0;
+  padding: 11px 13px;
+  color: var(--admin-muted);
+  background: var(--admin-background);
+  border: 1px solid var(--admin-border);
+  border-radius: 8px;
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.admin-categories-table {
+  min-width: 520px;
+}
+
+.admin-category-name {
+  color: var(--admin-text);
+  font-size: 12px;
+}
+
+@media (max-width: 600px) {
+  .admin-category-toolbar {
+    grid-template-columns: 1fr;
+  }
+}
+
 .admin-products-toolbar {
   display: grid;
   grid-template-columns: minmax(190px, 1.5fr) minmax(150px, .8fr) minmax(150px, .8fr) auto;

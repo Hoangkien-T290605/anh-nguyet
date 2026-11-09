@@ -5,6 +5,7 @@ const AUTH_KEY = "anh-nguyet-auth";
 const ADMIN_DESTINATIONS = new Set([
   "admin-dashboard.html",
   "admin-products.html",
+  "admin-categories.html",
   "admin-orders.html",
   "admin-reviews.html",
 ]);

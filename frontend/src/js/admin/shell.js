@@ -6,7 +6,7 @@ const THEME_KEY = "anh-nguyet-theme";
 const navigationItems = [
   { id: "dashboard", label: "Tổng quan", icon: "⌂", href: "admin-dashboard.html" },
   { id: "products", label: "Quản lý sản phẩm", icon: "▧", href: "admin-products.html" },
-  { id: "categories", label: "Quản lý danh mục", icon: "▦", disabled: true },
+  { id: "categories", label: "Quản lý danh mục", icon: "▦", href: "admin-categories.html" },
   { id: "orders", label: "Quản lý đơn hàng", icon: "▤", href: "admin-orders.html" },
   { id: "customers", label: "Quản lý khách hàng", icon: "♙", disabled: true },
   { id: "reviews", label: "Quản lý đánh giá", icon: "★", href: "admin-reviews.html" },

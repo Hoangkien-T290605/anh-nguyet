@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#7041a6" />
+    <link rel="stylesheet" href="./site.css" />
+    <link rel="stylesheet" href="./admin.css" />
+    <title>Quản lý danh mục | Ánh Nguyệt</title>
+  </head>
+  <body data-admin-page="categories">
+    <div id="admin-gate" class="admin-gate" role="status">Đang xác minh quyền quản trị...</div>
+    <div id="admin-app" class="admin-app" hidden>
+      <aside id="admin-sidebar" class="admin-sidebar"></aside>
+      <div class="admin-main-column">
+        <header id="admin-topbar" class="admin-topbar"></header>
+        <main id="admin-content" class="admin-content">
+          <section class="admin-page-heading">
+            <span>DANH MỤC KINH DOANH</span>
+            <h1>Quản lý danh mục</h1>
+            <p>Danh mục hiện được lưu trực tiếp trong trường danh mục của sản phẩm.</p>
+          </section>
+          <section class="admin-products-panel" aria-label="Danh sách danh mục sản phẩm">
+            <div class="admin-category-toolbar">
+              <label class="admin-category-search">Tìm danh mục
+                <input type="search" data-category-search placeholder="Nhập tên danh mục" autocomplete="off" />
+              </label>
+              <p class="admin-category-note">Chưa có API riêng để thêm, đổi tên hoặc xóa danh mục. Dữ liệu bên dưới được tổng hợp từ danh sách sản phẩm.</p>
+            </div>
+            <p class="admin-products-message" data-category-message role="status" aria-live="polite">Đang tải danh mục...</p>
+            <div class="admin-products-table-wrap" data-category-table-wrap hidden>
+              <table class="admin-products-table admin-categories-table">
+                <thead><tr><th>Danh mục</th><th>Tổng sản phẩm</th><th>Đang kinh doanh</th></tr></thead>
+                <tbody data-category-rows></tbody>
+              </table>
+            </div>
+          </section>
+        </main>
+      </div>
+    </div>
+    <script src="./config.js"></script>
+    <script type="module" src="./src/js/admin/main.js"></script>
+  </body>
+</html>
