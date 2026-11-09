@@ -6,35 +6,48 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#7041a6" />
     <link rel="stylesheet" href="./site.css" />
+    <link rel="stylesheet" href="./admin.css" />
     <title>Quản lý đơn hàng | Ánh Nguyệt</title>
   </head>
-  <body data-page="admin-orders">
-    <div class="site-shell">
-      <div id="site-header"></div>
-      <div id="page-content">
-        <main class="account-page admin-orders-page">
+  <body data-admin-page="orders">
+    <div id="admin-gate" class="admin-gate" role="status">Đang xác minh quyền quản trị...</div>
+    <div id="admin-app" class="admin-app" hidden>
+      <aside id="admin-sidebar" class="admin-sidebar"></aside>
+      <div class="admin-main-column">
+        <header id="admin-topbar" class="admin-topbar"></header>
+        <main id="admin-content" class="admin-content admin-orders-page">
+          <section class="admin-page-heading">
+            <span>ĐIỀU HÀNH CỬA HÀNG</span>
+            <h1>Quản lý đơn hàng</h1>
+            <p>Đơn hàng tài khoản và khách vãng lai.</p>
+          </section>
           <div class="admin-orders-primary">
-            <nav class="cart-breadcrumb" aria-label="Đường dẫn">
-              <a href="index.html">TRANG CHỦ</a><span>/</span
-              ><span>QUẢN LÝ ĐƠN HÀNG</span>
-            </nav>
-            <section class="cart-heading">
-              <p>ÁNH NGUYỆT ADMIN</p>
-              <h1>QUẢN LÝ ĐƠN HÀNG</h1>
-              <span>Đơn tài khoản và đơn khách vãng lai.</span>
+            <section class="admin-orders-toolbar" aria-label="Tìm kiếm và lọc đơn hàng">
+              <label>Tìm đơn hàng
+                <input type="search" data-admin-order-search placeholder="Mã đơn, người nhận, số điện thoại hoặc địa chỉ" autocomplete="off" />
+              </label>
+              <label>Trạng thái
+                <select data-admin-order-filter>
+                  <option value="all">Tất cả trạng thái</option>
+                  <option value="pending_confirmation">Chờ xác nhận</option>
+                  <option value="confirmed">Đã xác nhận</option>
+                  <option value="preparing">Đang chuẩn bị</option>
+                  <option value="shipping">Đang giao</option>
+                  <option value="completed">Hoàn thành</option>
+                  <option value="cancelled">Đã hủy</option>
+                </select>
+              </label>
             </section>
+            <p class="admin-orders-feedback" data-admin-orders-feedback role="status" aria-live="polite"></p>
             <div id="admin-orders-goc" aria-live="polite">
-              <div class="checkout-loading">
-                <span class="account-loading-spinner"></span>
-                <p>Đang tải đơn hàng...</p>
-              </div>
+              <div class="checkout-loading"><span class="account-loading-spinner"></span><p>Đang tải đơn hàng...</p></div>
             </div>
+            <nav class="admin-orders-pagination" data-admin-orders-pagination aria-label="Phân trang đơn hàng" hidden></nav>
           </div>
         </main>
       </div>
-      <div id="footer-container"></div>
     </div>
     <script src="./config.js"></script>
-    <script type="module" src="./src/js/main.js"></script>
+    <script type="module" src="./src/js/admin/main.js"></script>
   </body>
 </html>

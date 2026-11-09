@@ -1,8 +1,9 @@
-// Trang quản trị cho phép nhân viên có quyền Admin xem và cập nhật đơn hàng.
-import { API_BASE_URL } from "../services/api.js";
+// Trang quản trị đơn hàng dùng đúng các API Admin đang có.
+import { apiRequest, getProductImageUrl } from "../services/api.js";
 import { escapeHTML } from "../components/product-card.js";
 
 const AUTH_KEY = "anh-nguyet-auth";
+const PAGE_SIZE = 10;
 const STATUSES = [
   ["pending_confirmation", "Chờ xác nhận"],
   ["confirmed", "Đã xác nhận"],
@@ -11,8 +12,8 @@ const STATUSES = [
   ["completed", "Hoàn thành"],
   ["cancelled", "Đã hủy"],
 ];
+const STATUS_LABELS = new Map(STATUSES);
 
-// Đọc phiên tài khoản và JWT để bảo vệ trang quản trị.
 function readAuthSession() {
   try {
     const value = JSON.parse(localStorage.getItem(AUTH_KEY) || "null");
@@ -22,7 +23,6 @@ function readAuthSession() {
   }
 }
 
-// Định dạng thời gian đơn hàng theo thiết lập tiếng Việt.
 function formatDate(value) {
   const date = new Date(value);
   return Number.isNaN(date.getTime())
@@ -33,7 +33,6 @@ function formatDate(value) {
       }).format(date);
 }
 
-// Hiển thị giá trị tiền tệ theo chuẩn Việt Nam.
 function formatCurrency(value) {
   const amount = Number(value);
   return Number.isFinite(amount)
@@ -45,124 +44,219 @@ function formatCurrency(value) {
     : "—";
 }
 
-// Kiểm tra quyền truy cập rồi tải danh sách và trạng thái đơn hàng.
+function normalizeText(value) {
+  return String(value ?? "")
+    .toLocaleLowerCase("vi")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d")
+    .trim();
+}
+
+function isGuestOrder(order) {
+  return order.customer_type === "guest" || order.customer_id === null;
+}
+
 export async function mountAdminOrders() {
   const root = document.getElementById("admin-orders-goc");
+  const searchInput = document.querySelector("[data-admin-order-search]");
+  const statusFilter = document.querySelector("[data-admin-order-filter]");
+  const feedback = document.querySelector("[data-admin-orders-feedback]");
+  const pagination = document.querySelector("[data-admin-orders-pagination]");
   const auth = readAuthSession();
+
   if (!auth) {
-    window.location.replace("login.html?returnTo=admin-orders.html");
+    window.location.replace("admin-login.html?returnTo=admin-orders.html");
     return;
   }
 
   let orders = [];
-  let error = "";
+  let loadError = "";
   let loading = true;
+  let currentPage = 1;
+  let updateMessage = "";
+  let updateError = false;
   const pendingStatuses = new Map();
   const saving = new Set();
+  const updateErrors = new Map();
 
-  // Dựng danh sách đơn và trạng thái đang tải/lỗi.
-  // Dựng bảng đơn hàng và các trạng thái tải/lỗi.
+  function showFeedback(text = "", isError = false) {
+    feedback.textContent = text;
+    feedback.hidden = !text;
+    feedback.classList.toggle("is-error", isError);
+    feedback.setAttribute("role", isError ? "alert" : "status");
+  }
+
+  function filteredOrders() {
+    const query = normalizeText(searchInput.value);
+    const selectedStatus = statusFilter.value;
+    return orders.filter((order) => {
+      const matchesStatus = selectedStatus === "all" || order.status === selectedStatus;
+      const searchable = [
+        order.id,
+        order.recipient_name,
+        order.recipient_phone,
+        order.shipping_address,
+        isGuestOrder(order) ? "khach vang lai" : `tai khoan ${order.customer_id}`,
+        ...(Array.isArray(order.items) ? order.items.map((item) => item.product_name) : []),
+      ].join(" ");
+      return matchesStatus && (!query || normalizeText(searchable).includes(query));
+    });
+  }
+
+  function renderItems(items) {
+    if (!Array.isArray(items) || !items.length) {
+      return '<p class="admin-order-empty-items">Đơn hàng không có chi tiết sản phẩm.</p>';
+    }
+    return `<div class="admin-order-items-table-wrap"><table class="admin-order-items-table">
+      <thead><tr><th>Sản phẩm</th><th>Đơn giá</th><th>Số lượng</th><th>Thành tiền</th></tr></thead>
+      <tbody>${items.map((item) => {
+        const image = getProductImageUrl(item.product_image);
+        return `<tr>
+          <td><div class="admin-order-product"><span class="admin-order-product-image" data-order-image-fallback>${image ? `<img src="${escapeHTML(image)}" alt="" loading="lazy" data-order-product-image />` : "❋"}</span><span>${escapeHTML(item.product_name || "Sản phẩm đã lưu trong đơn")}</span></div></td>
+          <td>${formatCurrency(item.unit_price)}</td>
+          <td>${Number(item.quantity) || 0}</td>
+          <td>${formatCurrency(item.line_total)}</td>
+        </tr>`;
+      }).join("")}</tbody>
+    </table></div>`;
+  }
+
+  function renderPagination(total) {
+    const pageCount = Math.ceil(total / PAGE_SIZE);
+    pagination.hidden = pageCount <= 1;
+    if (pageCount <= 1) {
+      pagination.innerHTML = "";
+      return;
+    }
+    pagination.innerHTML = `<button type="button" data-order-page="-1" ${currentPage <= 1 ? "disabled" : ""}>Trang trước</button><span>Trang ${currentPage} / ${pageCount} · ${total} đơn hàng</span><button type="button" data-order-page="1" ${currentPage >= pageCount ? "disabled" : ""}>Trang sau</button>`;
+  }
+
+  function bindOrderImageFallbacks() {
+    root.querySelectorAll("[data-order-product-image]").forEach((image) => {
+      image.addEventListener("error", () => {
+        image.hidden = true;
+        image.parentElement.textContent = "❋";
+      }, { once: true });
+    });
+  }
+
   function renderOrders() {
     if (loading) {
-      root.innerHTML =
-        '<div class="account-order-unavailable" role="status"><div class="account-loading-spinner"></div><p>Đang tải toàn bộ đơn hàng...</p></div>';
+      root.innerHTML = '<div class="account-order-unavailable" role="status"><div class="account-loading-spinner"></div><p>Đang tải đơn hàng...</p></div>';
+      pagination.hidden = true;
       return;
     }
-    if (error) {
-      root.innerHTML = `<div class="account-order-unavailable" role="alert"><div class="account-empty-icon">!</div><h2>Không tải được đơn hàng</h2><p>${escapeHTML(error)}</p><button class="account-primary-button" type="button" data-admin-retry>Thử lại</button></div>`;
+    if (loadError) {
+      root.innerHTML = `<div class="account-order-unavailable" role="alert"><div class="account-empty-icon">!</div><h2>Không tải được đơn hàng</h2><p>${escapeHTML(loadError)}</p><button class="account-primary-button" type="button" data-admin-retry>Thử lại</button></div>`;
+      pagination.hidden = true;
       return;
     }
+
+    const filtered = filteredOrders();
+    const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+    currentPage = Math.min(currentPage, pageCount);
+    const visibleOrders = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
     if (!orders.length) {
-      root.innerHTML =
-        '<div class="account-order-unavailable"><div class="account-empty-icon">▤</div><h2>Chưa có đơn hàng</h2></div>';
+      root.innerHTML = '<div class="account-order-unavailable"><div class="account-empty-icon">▤</div><h2>Chưa có đơn hàng</h2></div>';
+      showFeedback(updateMessage, updateError);
+      pagination.hidden = true;
+      return;
+    }
+    if (!visibleOrders.length) {
+      root.innerHTML = '<div class="account-order-unavailable"><div class="account-empty-icon">⌕</div><h2>Không tìm thấy đơn hàng phù hợp</h2></div>';
+      renderPagination(0);
+      showFeedback(updateMessage, updateError);
       return;
     }
 
-    root.innerHTML = `<div class="admin-orders-list">${orders
-      .map((order) => {
-        const id = String(order.id);
-        const status = pendingStatuses.get(id) || order.status;
-        // Tóm lược các mặt hàng để Admin xem nhanh trong danh sách đơn.
-        const tomTatMatHang = (Array.isArray(order.items) ? order.items : [])
-          .map(
-            (item) =>
-              `${escapeHTML(item.product_name)} × ${Number(item.quantity) || 0}`,
-          )
-          .join(" · ");
-        return `<article class="admin-orders-card">
-        <div class="admin-orders-heading"><div><span class="account-order-label">MÃ ĐƠN</span><strong>#${escapeHTML(id)}</strong></div><span class="account-order-status">${order.customer_type === "guest" ? "Khách vãng lai" : `Tài khoản #${escapeHTML(order.customer_id)}`}</span></div>
-        <div class="admin-orders-grid"><div><span>Người nhận</span><strong>${escapeHTML(order.recipient_name || "")}</strong></div><div><span>Số điện thoại</span><strong>${escapeHTML(order.recipient_phone || "")}</strong></div><div><span>Ngày đặt</span><strong>${escapeHTML(formatDate(order.created_at))}</strong></div><div><span>Tổng tiền</span><strong>${formatCurrency(order.total_amount)}</strong></div></div>
-        <p class="admin-orders-address-detail">${escapeHTML(order.shipping_address || "")}</p>
-        <p class="admin-orders-item">${tomTatMatHang || "Không có sản phẩm trong dữ liệu đơn."}</p>
-        <div class="admin-orders-actions"><label>Trạng thái<select data-order-status="${escapeHTML(id)}">${STATUSES.map(([value, label]) => `<option value="${value}" ${status === value ? "selected" : ""}>${label}</option>`).join("")}</select></label><button class="account-primary-button" type="button" data-save-order-status="${escapeHTML(id)}" ${saving.has(id) ? "disabled" : ""}>${saving.has(id) ? "Đang lưu..." : "Cập nhật trạng thái"}</button></div>
+    root.innerHTML = `<div class="admin-orders-list">${visibleOrders.map((order) => {
+      const id = String(order.id);
+      const status = pendingStatuses.get(id) || order.status;
+      const statusLabel = STATUS_LABELS.get(order.status) || "Trạng thái không xác định";
+      const customer = isGuestOrder(order)
+        ? "Khách vãng lai"
+        : `Tài khoản #${escapeHTML(order.customer_id)}`;
+      const shippingFee = order.shipping_fee === null || order.shipping_fee === undefined
+        ? "Chưa cấu hình"
+        : formatCurrency(order.shipping_fee);
+      const statusOptions = STATUSES.map(([value, label]) => `<option value="${value}" ${status === value ? "selected" : ""}>${label}</option>`).join("");
+      return `<article class="admin-orders-card">
+        <div class="admin-orders-heading"><div><span class="account-order-label">MÃ ĐƠN</span><strong>#${escapeHTML(id)}</strong></div><span class="account-order-status">${customer}</span></div>
+        <div class="admin-orders-grid">
+          <div><span>Người nhận</span><strong>${escapeHTML(order.recipient_name || "—")}</strong></div>
+          <div><span>Số điện thoại</span><strong>${escapeHTML(order.recipient_phone || "—")}</strong></div>
+          <div><span>Ngày đặt</span><strong>${escapeHTML(formatDate(order.created_at))}</strong></div>
+          <div><span>Trạng thái hiện tại</span><strong>${escapeHTML(statusLabel)}</strong></div>
+          <div><span>Phương thức</span><strong>${escapeHTML(order.payment_method || "—")}</strong></div>
+          <div><span>Thanh toán</span><strong>${escapeHTML(order.payment_status || "—")}</strong></div>
+        </div>
+        <p class="admin-orders-address-detail"><strong>Địa chỉ nhận:</strong> ${escapeHTML(order.shipping_address || "—")}</p>
+        <div class="admin-order-totals"><span>Tạm tính <strong>${formatCurrency(order.subtotal)}</strong></span><span>Phí vận chuyển <strong>${shippingFee}</strong></span><span>Tổng đơn <strong>${formatCurrency(order.total_amount)}</strong></span></div>
+        <details class="admin-order-details"><summary>Chi tiết ${Array.isArray(order.items) ? order.items.length : 0} sản phẩm</summary>${renderItems(order.items)}</details>
+        ${updateErrors.has(id) ? `<p class="admin-order-update-error" role="alert">${escapeHTML(updateErrors.get(id))}</p>` : ""}
+        <div class="admin-orders-actions"><label>Trạng thái mới<select data-order-status="${escapeHTML(id)}">${statusOptions}</select></label><button class="account-primary-button" type="button" data-save-order-status="${escapeHTML(id)}" ${saving.has(id) ? "disabled" : ""}>${saving.has(id) ? "Đang lưu..." : "Cập nhật trạng thái"}</button></div>
       </article>`;
-      })
-      .join("")}</div>`;
+    }).join("")}</div>`;
+    bindOrderImageFallbacks();
+    renderPagination(filtered.length);
+    showFeedback(updateMessage, updateError);
   }
 
-  // Gửi yêu cầu quản trị kèm JWT và chuyển lỗi API thành thông báo rõ ràng.
-  async function adminRequest(path, options = {}) {
-    const response = await fetch(`${API_BASE_URL}${path}`, {
-      ...options,
-      headers: {
-        ...(options.body ? { "Content-Type": "application/json" } : {}),
-        Authorization: `Bearer ${auth.token}`,
-        ...options.headers,
-      },
-    });
-    const result = await response.json();
-    if (response.status === 401) {
-      localStorage.removeItem(AUTH_KEY);
-      window.dispatchEvent(
-        new CustomEvent("anh-nguyet-xac-thuc-cap-nhat", { detail: { user: null } }),
-      );
-      window.location.replace(
-        "login.html?session=expired&returnTo=admin-orders.html",
-      );
-    }
-    if (!response.ok || result?.success === false)
-      throw new Error(
-        result?.message || `Yêu cầu thất bại (${response.status}).`,
-      );
-    return result;
-  }
-
-  // Tải danh sách đơn hàng Admin được phép quản lý.
   async function loadOrders() {
     loading = true;
-    error = "";
+    loadError = "";
     renderOrders();
     try {
       const allOrders = [];
       let page = 1;
       let total = null;
       do {
-        const result = await adminRequest(
-          `/admin/orders?limit=50&page=${page}`,
-        );
+        const result = await apiRequest(`/admin/orders?limit=50&page=${page}`, {
+          headers: { Authorization: `Bearer ${auth.token}` },
+        });
         const pageOrders = Array.isArray(result.data) ? result.data : [];
+        if (!Array.isArray(result.data)) {
+          throw new Error("Máy chủ trả về danh sách đơn hàng không hợp lệ.");
+        }
         allOrders.push(...pageOrders);
-        total = Number.isFinite(Number(result.count))
-          ? Number(result.count)
-          : null;
-        if (!pageOrders.length || total === null || allOrders.length >= total)
-          break;
-        page++;
+        total = Number.isFinite(Number(result.count)) ? Number(result.count) : null;
+        if (!pageOrders.length || total === null || allOrders.length >= total) break;
+        page += 1;
       } while (page <= 1000);
       orders = allOrders;
+      currentPage = 1;
     } catch (requestError) {
-      error = requestError.message || "Không thể tải danh sách đơn hàng.";
+      if (requestError.status === 401) {
+        window.location.replace("admin-login.html?session=expired&returnTo=admin-orders.html");
+        return;
+      }
+      loadError = requestError.message || "Không thể tải danh sách đơn hàng.";
     } finally {
       loading = false;
       renderOrders();
     }
   }
 
-  root.addEventListener("change", (event) => {
-    if (event.target.matches("[data-order-status]"))
-      pendingStatuses.set(event.target.dataset.orderStatus, event.target.value);
+  searchInput.addEventListener("input", () => {
+    currentPage = 1;
+    renderOrders();
   });
-
+  statusFilter.addEventListener("change", () => {
+    currentPage = 1;
+    renderOrders();
+  });
+  root.addEventListener("change", (event) => {
+    const select = event.target.closest("[data-order-status]");
+    if (select) pendingStatuses.set(select.dataset.orderStatus, select.value);
+  });
+  pagination.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-order-page]");
+    if (!button || button.disabled) return;
+    currentPage += Number(button.dataset.orderPage);
+    renderOrders();
+  });
   root.addEventListener("click", async (event) => {
     if (event.target.closest("[data-admin-retry]")) {
       await loadOrders();
@@ -172,25 +266,44 @@ export async function mountAdminOrders() {
     if (!button) return;
     const id = button.dataset.saveOrderStatus;
     if (saving.has(id)) return;
-    const status =
-      pendingStatuses.get(id) ||
-      orders.find((order) => String(order.id) === id)?.status;
+    const order = orders.find((item) => String(item.id) === id);
+    const status = pendingStatuses.get(id);
+    if (!order || !STATUS_LABELS.has(status) || status === order.status) {
+      pendingStatuses.delete(id);
+      updateErrors.delete(id);
+      updateMessage = "Trạng thái đơn hàng không thay đổi.";
+      updateError = false;
+      renderOrders();
+      return;
+    }
+    const nextLabel = STATUS_LABELS.get(status);
+    if (!window.confirm(`Xác nhận chuyển đơn #${id} sang trạng thái “${nextLabel}”?`)) return;
+
     saving.add(id);
+    updateErrors.delete(id);
+    updateMessage = "";
     renderOrders();
     try {
-      const result = await adminRequest(
-        `/admin/orders/${encodeURIComponent(id)}/status`,
-        {
-          method: "PATCH",
-          body: JSON.stringify({ status }),
-        },
-      );
-      orders = orders.map((order) =>
-        String(order.id) === id ? result.data : order,
-      );
+      const result = await apiRequest(`/admin/orders/${encodeURIComponent(id)}/status`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${auth.token}` },
+        body: JSON.stringify({ status }),
+      });
+      if (!result.data || String(result.data.id) !== id) {
+        throw new Error("Máy chủ chưa xác nhận trạng thái đơn hàng.");
+      }
+      orders = orders.map((item) => String(item.id) === id ? result.data : item);
       pendingStatuses.delete(id);
+      updateMessage = `Đã cập nhật trạng thái đơn #${id}.`;
+      updateError = false;
     } catch (requestError) {
-      error = requestError.message || "Không thể cập nhật trạng thái đơn hàng.";
+      if (requestError.status === 401) {
+        window.location.replace("admin-login.html?session=expired&returnTo=admin-orders.html");
+        return;
+      }
+      updateErrors.set(id, requestError.message || "Không thể cập nhật trạng thái đơn hàng.");
+      updateMessage = "Không cập nhật được trạng thái đơn hàng.";
+      updateError = true;
     } finally {
       saving.delete(id);
       renderOrders();
