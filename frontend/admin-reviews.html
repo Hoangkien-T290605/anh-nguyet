@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#7041a6" />
+    <link rel="stylesheet" href="./site.css" />
+    <link rel="stylesheet" href="./admin.css" />
+    <title>Quản lý đánh giá | Ánh Nguyệt</title>
+  </head>
+  <body data-admin-page="reviews">
+    <div id="admin-gate" class="admin-gate" role="status">Đang xác minh quyền quản trị...</div>
+    <div id="admin-app" class="admin-app" hidden>
+      <aside id="admin-sidebar" class="admin-sidebar"></aside>
+      <div class="admin-main-column">
+        <header id="admin-topbar" class="admin-topbar"></header>
+        <main id="admin-content" class="admin-content admin-reviews-page">
+          <section class="admin-page-heading">
+            <span>ĐIỀU HÀNH CỬA HÀNG</span>
+            <h1>Quản lý đánh giá</h1>
+            <p>Ẩn hoặc xóa nội dung đánh giá không phù hợp.</p>
+          </section>
+          <div class="products-page-primary">
+            <section class="admin-reviews-toolbar" aria-label="Tìm kiếm và lọc đánh giá">
+              <label>Tìm đánh giá
+                <input type="search" data-review-search placeholder="Khách hàng, sản phẩm hoặc nội dung" autocomplete="off" />
+              </label>
+              <label>Số sao
+                <select data-review-rating>
+                  <option value="all">Tất cả số sao</option>
+                  <option value="5">5 sao</option>
+                  <option value="4">4 sao</option>
+                  <option value="3">3 sao</option>
+                  <option value="2">2 sao</option>
+                  <option value="1">1 sao</option>
+                </select>
+              </label>
+              <label>Trạng thái
+                <select data-review-visibility-filter>
+                  <option value="all">Tất cả trạng thái</option>
+                  <option value="visible">Đang hiển thị</option>
+                  <option value="hidden">Đã ẩn</option>
+                </select>
+              </label>
+            </section>
+            <p class="admin-reviews-limit-note">Bộ lọc áp dụng trên danh sách API trả về (tối đa 200 đánh giá gần nhất).</p>
+            <p class="admin-reviews-feedback" data-review-feedback role="status" aria-live="polite"></p>
+            <div id="admin-reviews-root" aria-live="polite">
+              <div class="checkout-loading"><span class="account-loading-spinner"></span><p>Đang tải đánh giá...</p></div>
+            </div>
+            <nav class="admin-reviews-pagination" data-review-pagination aria-label="Phân trang đánh giá" hidden></nav>
+          </div>
+        </main>
+      </div>
+    </div>
+    <dialog class="admin-review-dialog" data-review-dialog aria-labelledby="admin-review-dialog-title">
+      <section class="admin-review-dialog-content">
+        <header class="admin-review-dialog-heading">
+          <div><span class="admin-eyebrow">CHI TIẾT ĐÁNH GIÁ</span><h2 id="admin-review-dialog-title">Đánh giá sản phẩm</h2></div>
+          <button class="admin-product-close" type="button" data-review-close aria-label="Đóng chi tiết">×</button>
+        </header>
+        <div data-review-detail></div>
+      </section>
+    </dialog>
+    <script src="./config.js"></script>
+    <script type="module" src="./src/js/admin/main.js"></script>
+  </body>
+</html>
