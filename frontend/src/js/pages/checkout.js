@@ -1,6 +1,6 @@
 // Trang thanh toán chuẩn bị dữ liệu giao hàng và gửi yêu cầu tạo đơn.
 import { escapeHTML, formatPrice } from "../components/product-card.js";
-import { API_BASE_URL, getProductImageUrl } from "../services/api.js";
+import { API_BASE_URL, apiRequest, getProductImageUrl } from "../services/api.js";
 import {
   clearCartAfterOrder,
   loadCart,
@@ -29,6 +29,7 @@ function getOrderAttemptKey(payload, auth) {
     address_id: payload.address_id ?? null,
     guest: payload.guest ?? null,
     payment_method: payload.payment_method,
+    voucher_code: payload.voucher_code ?? null,
     items: payload.items
       .slice()
       .sort((left, right) => left.product_id - right.product_id),
@@ -76,6 +77,7 @@ function readAuthSession() {
 function loadAddressesForSession(auth) {
   return fetch(`${API_BASE_URL}/auth/addresses`, {
     headers: { Authorization: `Bearer ${auth.token}` },
+    signal: AbortSignal.timeout(12000),
   }).then(async (response) => {
     let result;
     try {
@@ -121,9 +123,19 @@ export async function mountCheckout() {
   let checkoutConfig = null;
   let checkoutConfigError = "";
   let paymentMethod = "cod";
+  let voucherCode = "";
+  let voucherResult = null;
+  let voucherCartSignature = "";
+  let voucherMessage = "";
+  let voucherError = false;
+  let isValidatingVoucher = false;
 
   let subtotal = 0;
   let quantityCount = 0;
+
+  function currentCartSignature() {
+    return JSON.stringify(cart.map((item) => ({ product_id: Number(item._id ?? item.id), quantity: Number(item.quantity) })).sort((a, b) => a.product_id - b.product_id));
+  }
 
   // Tính lại tạm tính và tổng số lượng từ dữ liệu giỏ hàng hiện hành.
   // Tính tạm tính và tổng số lượng từ các dòng giỏ hàng hiện tại.
@@ -136,6 +148,11 @@ export async function mountCheckout() {
       (sum, item) => sum + Number(item.quantity || 0),
       0,
     );
+    if (voucherResult && voucherCartSignature !== currentCartSignature()) {
+      voucherResult = null;
+      voucherMessage = "Giỏ hàng đã thay đổi; vui lòng kiểm tra lại mã giảm giá.";
+      voucherError = true;
+    }
   }
 
   updateCartTotal();
@@ -148,7 +165,7 @@ export async function mountCheckout() {
         ${addressError ? `<p class="checkout-top-row-alert checkout-alert-error" role="alert">${escapeHTML(addressError)}</p>` : ""}
         <label class="checkout-guest-field">Họ và tên người nhận<input name="guest-nguoi-nhan-ten" autocomplete="name" maxlength="100" value="${escapeHTML(guestRecipientName)}" required /></label>
         <label class="checkout-guest-field">Số điện thoại<input name="guest-nguoi-nhan-dien-thoai" type="tel" autocomplete="tel" maxlength="20" value="${escapeHTML(guestRecipientPhone)}" required /></label>
-        <label class="checkout-guest-field">Địa chỉ nhận hàng<textarea name="guest-giao-hang-dia-chi" autocomplete="street-dia-chi" rows="3" maxlength="2000" required>${escapeHTML(guestShippingAddress)}</textarea></label>
+        <label class="checkout-guest-field">Địa chỉ nhận hàng<textarea name="guest-giao-hang-dia-chi" autocomplete="street-address" rows="3" maxlength="2000" required>${escapeHTML(guestShippingAddress)}</textarea></label>
         <a class="checkout-text-link" href="login.html?returnTo=checkout.html">Đăng nhập để dùng địa chỉ đã lưu</a>
       </div>`;
     }
@@ -207,6 +224,7 @@ export async function mountCheckout() {
         <div class="checkout-success-frame">
           <h2>Sản phẩm đã đặt</h2>
           ${orderItems.map((item) => `<div class="checkout-success-item"><span>${escapeHTML(item.product_name || "Sản phẩm")} × ${Number(item.quantity) || 0}</span><strong>${formatPrice(item.line_total)}</strong></div>`).join("")}
+          ${Number(createdOrder.discount_amount) > 0 ? `<div class="checkout-success-item"><span>Mã ${escapeHTML(createdOrder.voucher_code || "voucher")} · giảm giá</span><strong>−${formatPrice(createdOrder.discount_amount)}</strong></div>` : ""}
           <div class="checkout-success-tong"><span>Tổng thanh toán</span><strong>${formatPrice(createdOrder.total_amount)}</strong></div>
         </div>
         <a class="checkout-button checkout-success-tracking" href="${trackingUrl}">${createdAsGuest ? "TRA CỨU ĐƠN HÀNG" : "XEM ĐƠN HÀNG CỦA TÔI"}</a>
@@ -219,11 +237,34 @@ export async function mountCheckout() {
       return;
     }
 
+    const shippingFeeValue = checkoutConfig?.shipping_fee;
+    const shippingFee = Number(shippingFeeValue);
+    const shippingFeeReady =
+      shippingFeeValue != null &&
+      Number.isFinite(shippingFee) &&
+      shippingFee >= 0;
+    const shippingFeeLabel = checkoutConfigError
+      ? "Không tải được"
+      : shippingFeeReady
+        ? formatPrice(shippingFee)
+        : "Chưa cấu hình";
+    const shippingFeeNote = checkoutConfigError
+      ? "Không thể xác định phí vận chuyển. Vui lòng thử tải lại trang trước khi đặt hàng."
+      : shippingFeeReady
+        ? "Backend sẽ xác nhận lại phí vận chuyển và tổng tiền khi tạo đơn."
+        : "Cửa hàng chưa cấu hình phí vận chuyển chính thức nên chưa thể xác nhận đơn hàng.";
+    const activeVoucherResult = voucherResult && voucherCartSignature === currentCartSignature() ? voucherResult : null;
+    const discountAmount = Number(activeVoucherResult?.discount_amount) || 0;
+    const displaySubtotal = Number.isFinite(Number(activeVoucherResult?.subtotal))
+      ? Number(activeVoucherResult.subtotal)
+      : subtotal;
+    const expectedTotal = displaySubtotal + (shippingFeeReady ? shippingFee : 0) - discountAmount;
+
     root.innerHTML = `${validationError || requestError ? `<div class="checkout-top-row-alert checkout-alert-error" role="alert"><p>${escapeHTML(validationError || requestError)}</p></div>` : ""}<div class="checkout-layout"><div class="checkout-detail">
       <section class="checkout-frame"><div class="checkout-frame-heading"><span class="checkout-buoc">01</span><div><h2>Thông tin nhận hàng</h2><p>${auth ? "Chọn địa chỉ đã lưu hoặc đăng nhập để tiếp tục." : "Nhập thông tin để đặt hàng không cần tài khoản."}</p></div></div>${hienThiKhuVucDiaChi()}</section>
       <section class="checkout-frame"><div class="checkout-frame-heading"><span class="checkout-buoc">02</span><div><h2>Phương thức thanh toán</h2><p>Thanh toán trực tiếp khi nhận hàng.</p></div></div><label class="checkout-payment-option"><input type="radio" name="payment-method" value="cod" checked /><span><strong>Thanh toán khi nhận hàng (COD)</strong><small>Bạn thanh toán cho đơn vị giao hàng khi nhận sản phẩm.</small></span></label>${checkoutConfigError ? `<p class="checkout-top-row-alert checkout-alert-error" role="alert">${escapeHTML(checkoutConfigError)}</p>` : ""}</section>
       <section class="checkout-frame"><div class="checkout-frame-heading"><span class="checkout-buoc">03</span><div><h2>Kiểm tra đơn hàng</h2><p>${quantityCount} sản phẩm trong giỏ hàng.</p></div></div><div class="checkout-product-list">${hienThiMatHang()}</div></section>
-    </div><aside class="checkout-summary"><h2>TỔNG KẾT ĐƠN HÀNG</h2><div class="checkout-summary-item"><span>Sản phẩm (${quantityCount})</span><strong>${formatPrice(subtotal)}</strong></div><div class="checkout-summary-item"><span>Phí vận chuyển</span><strong>${checkoutConfig?.shipping_fee == null ? "Chưa cấu hình" : formatPrice(checkoutConfig.shipping_fee)}</strong></div><div class="summary-divider"></div><div class="summary-tong"><span>${checkoutConfig?.shipping_fee == null ? "Tạm tính (chưa gồm giao hàng)" : "Tổng thanh toán dự kiến"}</span><strong>${formatPrice(subtotal + (Number(checkoutConfig?.shipping_fee) || 0))}</strong></div><p class="checkout-shipping-note">${checkoutConfig?.shipping_fee == null ? "Chưa thể xác nhận đơn hàng vì cửa hàng chưa cấu hình phí vận chuyển chính thức." : "Backend sẽ xác nhận lại phí vận chuyển và tổng tiền khi tạo đơn."}</p><button class="checkout-button checkout-button-confirm" type="button" data-set-order ${isSubmitting ? "disabled" : ""}>${isSubmitting ? "ĐANG GỬI ĐƠN..." : "XÁC NHẬN ĐẶT HÀNG"}</button><p class="checkout-note">Backend kiểm tra tồn kho và tính giá từ cơ sở dữ liệu khi bạn xác nhận.</p><a class="checkout-link-back" href="cart.html">← Quay lại giỏ hàng</a></aside></div>`;
+    </div><aside class="checkout-summary"><h2>TỔNG KẾT ĐƠN HÀNG</h2><div class="checkout-summary-item"><span>Sản phẩm (${quantityCount})</span><strong>${formatPrice(displaySubtotal)}</strong></div><div class="checkout-summary-item"><span>Phí vận chuyển</span><strong>${shippingFeeLabel}</strong></div>${checkoutConfig?.voucher_available === true ? `<div class="checkout-voucher-control"><label for="checkout-voucher-code">Mã giảm giá</label><div><input id="checkout-voucher-code" name="voucher-code" maxlength="40" autocomplete="off" value="${escapeHTML(voucherCode)}" placeholder="Nhập mã voucher" ${isValidatingVoucher || isSubmitting ? "disabled" : ""} /><button class="checkout-voucher-button" type="button" data-voucher-validate ${isValidatingVoucher || isSubmitting ? "disabled" : ""}>${isValidatingVoucher ? "ĐANG KIỂM TRA..." : "ÁP DỤNG"}</button></div>${voucherMessage ? `<p class="checkout-voucher-message ${voucherError ? "is-error" : "is-success"}" role="${voucherError ? "alert" : "status"}">${escapeHTML(voucherMessage)}</p>` : ""}</div>${activeVoucherResult ? `<div class="checkout-summary-item checkout-voucher-discount"><span>Giảm giá · ${escapeHTML(activeVoucherResult.code)}</span><strong>−${formatPrice(discountAmount)}</strong></div>` : ""}` : `<p class="checkout-shipping-note">Mã giảm giá sẽ khả dụng sau khi cơ sở dữ liệu được nâng cấp.</p>`}<div class="summary-divider"></div><div class="summary-tong"><span>${shippingFeeReady ? "Tổng thanh toán dự kiến" : "Tạm tính (chưa gồm giao hàng)"}</span><strong>${formatPrice(expectedTotal)}</strong></div><p class="checkout-shipping-note">${escapeHTML(shippingFeeNote)}</p><button class="checkout-button checkout-button-confirm" type="button" data-set-order ${isSubmitting || !shippingFeeReady ? "disabled" : ""}>${isSubmitting ? "ĐANG GỬI ĐƠN..." : "XÁC NHẬN ĐẶT HÀNG"}</button><p class="checkout-note">Backend kiểm tra tồn kho, giá và mã giảm giá từ cơ sở dữ liệu khi bạn xác nhận.</p><a class="checkout-link-back" href="cart.html">← Quay lại giỏ hàng</a></aside></div>`;
 
     root.querySelectorAll("[data-checkout-image]").forEach((image) =>
       image.addEventListener(
@@ -265,7 +306,10 @@ export async function mountCheckout() {
         selectedId = "";
       } else {
         addressState = "error";
-        addressError = error.message || "Không thể tải địa chỉ nhận hàng.";
+        addressError =
+          error.name === "TimeoutError"
+            ? "Máy chủ không phản hồi khi tải địa chỉ nhận hàng. Vui lòng thử lại."
+            : error.message || "Không thể tải địa chỉ nhận hàng.";
       }
     }
     hienThiTrangThanhToan();
@@ -291,11 +335,52 @@ export async function mountCheckout() {
       guestRecipientPhone = event.target.value;
     if (event.target.name === "guest-giao-hang-dia-chi")
       guestShippingAddress = event.target.value;
+    if (event.target.name === "voucher-code") {
+      voucherCode = event.target.value;
+      voucherResult = null;
+      voucherMessage = "";
+    }
     if (event.target.name?.startsWith("guest-")) addressError = "";
   });
   root.addEventListener("click", async (event) => {
     if (event.target.closest("[data-retry-address-detail]")) {
       await taiDanhSachDiaChi();
+      return;
+    }
+    if (event.target.closest("[data-voucher-validate]")) {
+      if (isValidatingVoucher || isSubmitting) return;
+      const input = root.querySelector('[name="voucher-code"]');
+      voucherCode = input?.value.trim() || "";
+      if (!voucherCode) {
+        voucherMessage = "Vui lòng nhập mã giảm giá.";
+        voucherError = true;
+        hienThiTrangThanhToan();
+        return;
+      }
+      isValidatingVoucher = true;
+      voucherMessage = "Đang kiểm tra điều kiện mã giảm giá...";
+      voucherError = false;
+      hienThiTrangThanhToan();
+      try {
+        const items = cart.map((item) => ({ product_id: Number(item._id ?? item.id), quantity: Number(item.quantity) }));
+        const result = await apiRequest("/vouchers/validate", {
+          method: "POST",
+          body: JSON.stringify({ code: voucherCode, items }),
+        });
+        if (!result.success || !result.data) throw new Error("Backend không xác nhận mã giảm giá.");
+        voucherResult = result.data;
+        voucherCartSignature = currentCartSignature();
+        voucherCode = result.data.code;
+        voucherMessage = `Áp dụng thành công, giảm ${formatPrice(result.data.discount_amount)}.`;
+        voucherError = false;
+      } catch (error) {
+        voucherResult = null;
+        voucherMessage = error.message || "Không thể xác minh mã giảm giá.";
+        voucherError = true;
+      } finally {
+        isValidatingVoucher = false;
+        hienThiTrangThanhToan();
+      }
       return;
     }
     if (event.target.closest("[data-set-order]")) {
@@ -320,6 +405,11 @@ export async function mountCheckout() {
       updateCartTotal();
       if (!currentCart.length) {
         cart = [];
+        hienThiTrangThanhToan();
+        return;
+      }
+      if (voucherCode && (!voucherResult || voucherCartSignature !== currentCartSignature())) {
+        validationError = "Vui lòng kiểm tra lại mã giảm giá trước khi đặt hàng.";
         hienThiTrangThanhToan();
         return;
       }
@@ -383,7 +473,7 @@ export async function mountCheckout() {
       hienThiTrangThanhToan();
       const authForOrder = auth;
       const orderPayload = authForOrder
-        ? { address_id: Number(selectedId), payment_method: paymentMethod, items }
+        ? { address_id: Number(selectedId), payment_method: paymentMethod, items, ...(voucherResult ? { voucher_code: voucherResult.code } : {}) }
         : {
             payment_method: paymentMethod,
             guest: {
@@ -392,6 +482,7 @@ export async function mountCheckout() {
               shipping_address: guestShippingAddress.trim(),
             },
             items,
+            ...(voucherResult ? { voucher_code: voucherResult.code } : {}),
           };
       const idempotencyKey = getOrderAttemptKey(orderPayload, authForOrder);
       try {
@@ -405,6 +496,7 @@ export async function mountCheckout() {
           method: "POST",
           headers,
           body: JSON.stringify(orderPayload),
+          signal: AbortSignal.timeout(30000),
         });
 
         let result;
@@ -451,7 +543,9 @@ export async function mountCheckout() {
         updateCartTotal();
       } catch (error) {
         requestError =
-          error instanceof TypeError
+          error.name === "TimeoutError"
+            ? "Máy chủ phản hồi quá thời gian. Giỏ hàng vẫn được giữ; bạn có thể thử lại an toàn."
+            : error instanceof TypeError
             ? "Không thể kết nối máy chủ. Giỏ hàng của bạn vẫn được giữ nguyên."
             : error.message ||
               "Đặt hàng thất bại. Giỏ hàng của bạn vẫn được giữ nguyên.";
@@ -463,7 +557,9 @@ export async function mountCheckout() {
   });
 
   try {
-    const response = await fetch(`${API_BASE_URL}/checkout/config`);
+    const response = await fetch(`${API_BASE_URL}/checkout/config`, {
+      signal: AbortSignal.timeout(12000),
+    });
     const result = await response.json();
     if (!response.ok || result?.success !== true) {
       throw new Error(result?.message || `Không thể tải cấu hình thanh toán (${response.status}).`);
@@ -472,10 +568,21 @@ export async function mountCheckout() {
     if (!Array.isArray(checkoutConfig?.payment_methods) || !checkoutConfig.payment_methods.includes("cod")) {
       throw new Error("Backend chưa bật phương thức COD.");
     }
+    const shippingFee = checkoutConfig.shipping_fee;
+    if (
+      shippingFee != null &&
+      (!Number.isFinite(Number(shippingFee)) || Number(shippingFee) < 0)
+    ) {
+      throw new Error("Phí vận chuyển chưa được cấu hình hợp lệ.");
+    }
   } catch (error) {
-    checkoutConfigError = error instanceof TypeError
-      ? "Không thể kết nối máy chủ để tải cấu hình thanh toán."
-      : error.message || "Không thể tải cấu hình thanh toán.";
+    checkoutConfig = null;
+    checkoutConfigError =
+      error.name === "TimeoutError"
+        ? "Máy chủ không phản hồi khi tải cấu hình thanh toán."
+        : error instanceof TypeError
+          ? "Không thể kết nối máy chủ để tải cấu hình thanh toán."
+          : error.message || "Không thể tải cấu hình thanh toán.";
   }
   hienThiTrangThanhToan();
   if (cart.length) await taiDanhSachDiaChi();

@@ -1,12 +1,15 @@
 // Đầu trang đồng bộ điều hướng, tài khoản, giao diện và số lượng giỏ hàng.
 import { getCartCount } from "../services/cart.js";
-import { getAvatarUrl } from "../services/api.js";
+import { apiRequest, getAvatarUrl } from "../services/api.js";
 
 const logoUrl = "./assets/logo-anh-nguyet.png";
 const accountIconUrl = "./assets/icon-account.png";
 
 const AUTH_KEY = "anh-nguyet-auth";
 const THEME_KEY = "anh-nguyet-theme";
+let verifiedUser = null;
+let verifiedToken = "";
+let roleVerificationSequence = 0;
 
 // Áp dụng chủ đề màu và lưu lựa chọn trên trình duyệt.
 function applyTheme(theme) {
@@ -23,11 +26,11 @@ function applyTheme(theme) {
   button.textContent = normalized === "dark" ? "☀" : "☾";
 }
 
-// Đọc thông tin người dùng trong phiên đăng nhập hiện tại.
-function getSavedUser() {
+// Đọc phiên đăng nhập đang lưu; role trong localStorage không được dùng để cấp quyền menu.
+function getSavedSession() {
   try {
     const auth = JSON.parse(localStorage.getItem(AUTH_KEY) || "null");
-    return auth?.token && auth?.user ? auth.user : null;
+    return auth?.token && auth?.user ? auth : null;
   } catch {
     return null;
   }
@@ -52,7 +55,12 @@ function escapeHTML(value = "") {
 function renderAccount() {
   const mount = document.querySelector("[data-header-account]");
   if (!mount) return;
-  const user = getSavedUser();
+  const session = getSavedSession();
+  const user = session
+    ? verifiedToken === session.token && verifiedUser
+      ? verifiedUser
+      : session.user
+    : null;
 
   if (!user) {
     mount.innerHTML =
@@ -79,12 +87,44 @@ function renderAccount() {
       <div class="account-menu" data-account-menu hidden>
         <div class="account-menu-heading"><span class="account-menu-name">${name}</span><span class="account-menu-email">${escapeHTML(user.email || "")}</span></div>
         <a class="account-menu-item" href="account.html"><span class="account-menu-icon"><img src="${accountIconUrl}" alt="" /></span>Tài khoản của tôi</a>
-        ${user.role === "admin" ? '<a class="account-menu-item" href="admin-orders.html"><span>▤</span>Quản lý đơn hàng</a>' : ""}
+        <a class="account-menu-item" href="favorites.html"><span>♡</span>Sản phẩm yêu thích</a>
+        ${verifiedToken === session.token && verifiedUser?.role === "admin" ? '<a class="account-menu-item" href="admin-dashboard.html"><span>⌂</span>Khu vực quản trị</a>' : ""}
         <a class="account-menu-item" href="account.html?tab=orders"><span>▤</span>Đơn mua</a>
         <div class="account-menu-divider"></div>
         <button class="account-menu-item account-menu-state-display" type="button" data-state-display><span>↪</span>Đăng xuất</button>
       </div>
     </div>`;
+}
+
+// Xác minh vai trò mới nhất từ Backend trước khi hiển thị liên kết quản trị.
+function refreshVerifiedAccount() {
+  const session = getSavedSession();
+  const sequence = ++roleVerificationSequence;
+  if (!session) {
+    verifiedUser = null;
+    verifiedToken = "";
+    renderAccount();
+    return;
+  }
+
+  verifiedUser = null;
+  verifiedToken = "";
+  renderAccount();
+  void apiRequest("/auth/me", {
+    headers: { Authorization: `Bearer ${session.token}` },
+  }).then((result) => {
+    if (sequence !== roleVerificationSequence) return;
+    const currentSession = getSavedSession();
+    if (!currentSession || currentSession.token !== session.token || !result.user) return;
+    verifiedUser = result.user;
+    verifiedToken = session.token;
+    renderAccount();
+  }).catch(() => {
+    if (sequence !== roleVerificationSequence) return;
+    verifiedUser = null;
+    verifiedToken = "";
+    renderAccount();
+  });
 }
 
 // Khởi tạo đầu trang và đăng ký các sự kiện dùng chung.
@@ -99,8 +139,8 @@ export function mountHeader() {
       <nav class="primary-navigation" data-primary-navigation aria-label="Điều hướng chính">
         <a class="nav-link ${document.body.dataset.page === "home" ? "is-active" : ""}" href="index.html">Trang chủ</a>
         <a class="nav-link ${["products", "product-detail"].includes(document.body.dataset.page) ? "is-active" : ""}" href="products.html">Sản phẩm</a>
-        <a class="nav-link" href="/gioi-thieu">Giới thiệu</a>
-        <a class="nav-link" href="/lien-he">Liên hệ</a>
+        <a class="nav-link" href="about.html">Giới thiệu</a>
+        <a class="nav-link" href="contact.html">Liên hệ</a>
         <button class="theme-toggle" type="button" data-theme-toggle aria-pressed="false" aria-label="Chuyển giao diện tối">☾</button>
       </nav>
       <label class="search-box"><span aria-hidden="true">⌕</span><input type="search" data-search placeholder="Tìm kiếm sản phẩm..." aria-label="Tìm kiếm sản phẩm" /></label>
@@ -110,6 +150,7 @@ export function mountHeader() {
 
   renderAccount();
   applyTheme(localStorage.getItem(THEME_KEY) || "light");
+  refreshVerifiedAccount();
 
   mount.addEventListener("click", (event) => {
     const menuButton = event.target.closest("[data-menu-toggle]");
@@ -145,7 +186,12 @@ export function mountHeader() {
 
   document.addEventListener("click", (event) => {
     const menu = mount.querySelector("[data-account-menu]");
-    if (menu && !event.target.closest(".account-dropdown-list")) menu.hidden = true;
+    if (menu && !event.target.closest(".account-dropdown-list")) {
+      menu.hidden = true;
+      mount
+        .querySelector("[data-account-toggle]")
+        ?.setAttribute("aria-expanded", "false");
+    }
   });
 
   window.addEventListener("anh-nguyet-cart-cap-nhat", (event) => {
@@ -154,6 +200,8 @@ export function mountHeader() {
       count.textContent = String(event.detail?.count ?? getCartCount());
   });
 
-  window.addEventListener("anh-nguyet-xac-thuc-cap-nhat", renderAccount);
-  window.addEventListener("storage", renderAccount);
+  window.addEventListener("anh-nguyet-xac-thuc-cap-nhat", refreshVerifiedAccount);
+  window.addEventListener("storage", (event) => {
+    if (event.key === AUTH_KEY || event.key === null) refreshVerifiedAccount();
+  });
 }

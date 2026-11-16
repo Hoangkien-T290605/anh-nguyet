@@ -98,16 +98,29 @@ function getOrderStatus(status) {
 // Gửi yêu cầu có JWT và giữ thông tin trạng thái lỗi cho trang tài khoản.
 async function accountRequest(path, auth, options = {}) {
   const multipart = options.body instanceof FormData;
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...options,
-    headers: {
-      ...(options.body && !multipart
-        ? { "Content-Type": "application/json" }
-        : {}),
-      Authorization: `Bearer ${auth.token}`,
-      ...options.headers,
-    },
-  });
+  let response;
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      ...options,
+      signal:
+        options.signal ?? AbortSignal.timeout(multipart ? 60000 : 12000),
+      headers: {
+        ...(options.body && !multipart
+          ? { "Content-Type": "application/json" }
+          : {}),
+        Authorization: `Bearer ${auth.token}`,
+        ...options.headers,
+      },
+    });
+  } catch (cause) {
+    const error = new Error(
+      cause?.name === "TimeoutError" || cause?.name === "AbortError"
+        ? "Máy chủ không phản hồi trong thời gian chờ. Vui lòng thử lại."
+        : "Không thể kết nối đến máy chủ. Vui lòng kiểm tra kết nối và thử lại.",
+    );
+    error.name = cause?.name || "NetworkError";
+    throw error;
+  }
   let result;
   try {
     result = await response.json();
@@ -157,7 +170,11 @@ export async function mountAccount() {
   let selectedOrder = null;
   let orderDetailLoading = false;
   let orderDetailError = "";
+  const reviewEligibilityByProduct = new Map();
+  const reviewSubmissions = new Set();
+  let reviewFormProductId = "";
   let tab = initialTab;
+  let profileDraft = null;
   let addressFormOpen = false;
   let editingId = null;
   let addressDraft = null;
@@ -245,6 +262,56 @@ export async function mountAccount() {
         ordersError = error.message || "Không thể tải danh sách đơn hàng.";
     } finally {
       ordersLoading = false;
+      hienThiTrangTaiKhoan();
+    }
+  };
+
+  // Kiểm tra điều kiện đánh giá theo từng sản phẩm bằng tài khoản hiện tại.
+  const taiDieuKienDanhGiaDonHang = async (order, force = false) => {
+    if (order?.status !== "completed") return;
+    const productIds = [...new Set(
+      (Array.isArray(order.items) ? order.items : [])
+        .map((item) => item.product_id)
+        .filter((id) => Number.isSafeInteger(Number(id)) && Number(id) > 0)
+        .map(String),
+    )];
+    const pendingIds = productIds.filter((id) =>
+      force || !reviewEligibilityByProduct.has(id),
+    );
+    if (!pendingIds.length) return;
+
+    pendingIds.forEach((id) => {
+      reviewEligibilityByProduct.set(id, { state: "loading" });
+    });
+    hienThiTrangTaiKhoan();
+
+    await Promise.all(pendingIds.map(async (productId) => {
+      try {
+        const result = await guiYeuCauTaiKhoanNoiBo(
+          `/products/${encodeURIComponent(productId)}/reviews/eligibility`,
+        );
+        if (!result.data) throw new Error("Máy chủ không trả điều kiện đánh giá.");
+        const state = result.data.has_reviewed
+          ? "reviewed"
+          : result.data.can_review
+            ? "eligible"
+            : "unavailable";
+        reviewEligibilityByProduct.set(productId, {
+          state,
+          canReview: Boolean(result.data.can_review),
+          hasReviewed: Boolean(result.data.has_reviewed),
+        });
+      } catch (error) {
+        if (error.status !== 401) {
+          reviewEligibilityByProduct.set(productId, {
+            state: "error",
+            message: error.message || "Không thể kiểm tra điều kiện đánh giá.",
+          });
+        }
+      }
+    }));
+
+    if (selectedOrder && String(selectedOrder.id) === String(order.id)) {
       hienThiTrangTaiKhoan();
     }
   };
@@ -375,25 +442,26 @@ export async function mountAccount() {
         ${hasCoords ? `<div class="account-map-coordinates"><span class="account-map-status-dot"></span><div><strong>Đã chọn vị trí giao hàng</strong><p>Vĩ độ: ${Number(d.latitude).toFixed(7)} · Kinh độ: ${Number(d.longitude).toFixed(7)}</p></div></div>` : '<div class="account-map-suggestion"><span>⌖</span>Chưa chọn vị trí. Bạn có thể nhập địa chỉ thủ công nếu không cấp quyền định vị.</div>'}
         <div class="account-address-detail-coordinates-all-field"><label>Vĩ độ<input name="latitude" type="number" step="any" value="${hasCoords ? escapeHTML(d.latitude) : ""}" placeholder="Tùy chọn" /></label><label>Kinh độ<input name="longitude" type="number" step="any" value="${hasCoords ? escapeHTML(d.longitude) : ""}" placeholder="Tùy chọn" /></label></div>
       </section>
-      <label class="account-default-o-select"><input type="checkhop" name="is_default" ${d.is_default ? "checked" : ""} /><span>Đặt làm địa chỉ mặc định</span></label>
+      <label class="account-default-o-select"><input type="checkbox" name="is_default" ${d.is_default ? "checked" : ""} /><span>Đặt làm địa chỉ mặc định</span></label>
       <div class="account-address-detail-form-actions"><button type="button" class="account-sub-button" data-cancel-address-detail>Hủy</button><button type="submit" class="account-primary-button" ${saving ? "disabled" : ""}>${saving ? "Đang lưu..." : "Lưu địa chỉ"}</button></div>
     </form>`;
   }
 
   // Hiển thị hồ sơ và trạng thái chỉnh sửa thông tin cá nhân.
   function hienThiHoSo() {
+    const profile = profileDraft || user;
     const picture = avatarPreview || getAvatarUrl(user.avatar_url);
     const avatar = picture
       ? `<img src="${escapeHTML(picture)}" alt="Ảnh đại diện" />`
       : escapeHTML(getInitials(user.full_name));
     return `<div class="account-content-heading"><div><span class="account-eyebrow">THÔNG TIN CÁ NHÂN</span><h1>Hồ sơ của tôi</h1><p>Quản lý thông tin hồ sơ để tài khoản của bạn luôn được cập nhật.</p></div></div>
       <form class="account-form" data-profile-form><div class="account-form-all-field">
-        <div class="account-field"><label for="account-full-full-name">Họ và tên</label><input id="account-full-full-name" name="full_name" value="${escapeHTML(user.full_name || "")}" maxlength="100" required /></div>
+        <div class="account-field"><label for="account-full-full-name">Họ và tên</label><input id="account-full-full-name" name="full_name" value="${escapeHTML(profile.full_name || "")}" maxlength="100" required /></div>
         <div class="account-field"><label for="account-email">Email</label><div class="account-o-input-wrapper"><input id="account-email" type="email" value="${escapeHTML(user.email || "")}" readonly /><span class="account-o-input-khoa">Đã xác thực</span></div><span class="account-field-note">Email được sử dụng để đăng nhập và hiện chưa thể thay đổi.</span></div>
-        <div class="account-field"><label for="account-phone">Số điện thoại</label><input id="account-phone" name="phone" type="tel" value="${escapeHTML(user.phone || "")}" maxlength="20" /></div>
-        <div class="account-field account-field-address-detail"><label for="account-address-detail">Địa chỉ</label><textarea id="account-address-detail" name="address" rows="4">${escapeHTML(user.address || "")}</textarea></div>
+        <div class="account-field"><label for="account-phone">Số điện thoại</label><input id="account-phone" name="phone" type="tel" value="${escapeHTML(profile.phone || "")}" maxlength="20" /></div>
+        <div class="account-field account-field-address-detail"><label for="account-address-detail">Địa chỉ</label><textarea id="account-address-detail" name="address" rows="4">${escapeHTML(profile.address || "")}</textarea></div>
         <div class="account-form-actions"><button class="account-primary-button" type="submit" data-save-profile ${saving ? "disabled" : ""}>${saving ? "Đang lưu..." : "Lưu thay đổi"}</button></div>
-      </div><div class="account-avatar-frame"><div class="account-avatar-view-preview">${avatar}</div><strong>${escapeHTML(user.full_name || "Thành viên Ánh Nguyệt")}</strong><span>Thành viên Ánh Nguyệt</span><p>Chọn ảnh JPG, PNG, WEBP hoặc GIF, tối đa 5MB.</p><input type="file" data-avatar-file accept="image/jpeg,image/png,image/webp,image/gif" hidden /><button type="button" class="account-primary-button" data-select-avatar ${uploading ? "disabled" : ""}>Chọn ảnh đại diện</button><div class="account-avatar-actions" ${avatarFile ? "" : "hidden"}><button type="button" class="account-primary-button" data-account-avatar ${uploading ? "disabled" : ""}>${uploading ? "Đang tải lên..." : "Lưu ảnh"}</button><button type="button" class="account-sub-button" data-cancel-avatar>Hủy</button></div></div></form>`;
+      </div><div class="account-avatar-frame"><div class="account-avatar-view-preview">${avatar}</div><strong>${escapeHTML(profile.full_name || "Thành viên Ánh Nguyệt")}</strong><span>Thành viên Ánh Nguyệt</span><p>Chọn ảnh JPG, PNG, WEBP hoặc GIF, tối đa 5MB.</p><input type="file" data-avatar-file accept="image/jpeg,image/png,image/webp,image/gif" hidden /><button type="button" class="account-primary-button" data-select-avatar ${uploading ? "disabled" : ""}>Chọn ảnh đại diện</button><div class="account-avatar-actions" ${avatarFile ? "" : "hidden"}><button type="button" class="account-primary-button" data-account-avatar ${uploading ? "disabled" : ""}>${uploading ? "Đang tải lên..." : "Lưu ảnh"}</button><button type="button" class="account-sub-button" data-cancel-avatar>Hủy</button></div></div></form>`;
   }
 
   // Hiển thị địa chỉ đã lưu và thao tác chọn địa chỉ mặc định.
@@ -443,6 +511,42 @@ export async function mountAccount() {
     return `<div class="account-content-heading account-order-heading"><div><span class="account-eyebrow">LỊCH SỬ GIAO DỊCH</span><h1>Đơn hàng của tôi</h1><p>Theo dõi trạng thái và thông tin các đơn hàng đã đặt.</p></div><label class="account-order-filter">Trạng thái<select disabled aria-label="Lọc đơn hàng theo trạng thái"><option>Tất cả đơn hàng</option><option>Chờ xác nhận</option><option>Đã xác nhận</option><option>Đang chuẩn bị</option><option>Đang giao</option><option>Hoàn thành</option><option>Đã hủy</option></select></label></div>${content}`;
   }
 
+  // Hiển thị đúng trạng thái đánh giá cho từng sản phẩm trong đơn đã hoàn thành.
+  function hienThiTrangThaiDanhGia(productId, orderCompleted) {
+    if (!orderCompleted) return "";
+    if (!productId || !Number.isSafeInteger(Number(productId)) || Number(productId) < 1) {
+      return '<span class="account-order-review-state">Sản phẩm không còn khả dụng để đánh giá.</span>';
+    }
+    const state = reviewEligibilityByProduct.get(String(productId));
+    if (!state || state.state === "loading") {
+      return '<span class="account-order-review-state" role="status">Đang kiểm tra điều kiện đánh giá...</span>';
+    }
+    if (state.state === "reviewed") {
+      return '<span class="account-order-review-state is-reviewed">✓ Đã đánh giá</span>';
+    }
+    if (state.state === "eligible") {
+      return `<button class="account-order-review-button" type="button" data-order-review-open="${escapeHTML(productId)}">Viết đánh giá</button>`;
+    }
+    if (state.state === "error") {
+      return `<span class="account-order-review-state" role="alert">${escapeHTML(state.message)} <button class="account-order-review-retry" type="button" data-order-review-retry="${escapeHTML(productId)}">Thử lại</button></span>`;
+    }
+    return '<span class="account-order-review-state">Chưa đủ điều kiện đánh giá sản phẩm này.</span>';
+  }
+
+  // Tái sử dụng kiểu biểu mẫu và trường dữ liệu của đánh giá sản phẩm hiện có.
+  function hienThiBieuMauDanhGia(productId, productName) {
+    if (reviewFormProductId !== String(productId)) return "";
+    return `<form class="detail-review-form account-order-review-form" data-account-review-form="${escapeHTML(productId)}">
+      <h3>Đánh giá ${escapeHTML(productName || "sản phẩm này")}</h3>
+      <label>Điểm đánh giá<select name="rating" required><option value="">Chọn số sao</option><option value="5">5 sao</option><option value="4">4 sao</option><option value="3">3 sao</option><option value="2">2 sao</option><option value="1">1 sao</option></select></label>
+      <label>Nhận xét<textarea name="comment" rows="4" maxlength="3000" placeholder="Chia sẻ trải nghiệm của bạn"></textarea></label>
+      <label>Ảnh đánh giá (tối đa 5 ảnh, mỗi ảnh 5 MB)<input type="file" name="images" accept="image/jpeg,image/png,image/webp,image/gif" multiple data-account-review-images></label>
+      <div class="review-image-preview" data-account-review-preview></div>
+      <p class="account-order-review-feedback" data-account-review-feedback role="status" aria-live="polite" hidden></p>
+      <div class="review-form-actions"><button class="account-primary-button" type="submit">Gửi đánh giá</button><button class="account-order-review-cancel" type="button" data-order-review-cancel>Hủy</button></div>
+    </form>`;
+  }
+
   // Dựng thông tin chi tiết đơn được chọn.
   function hienThiChiTietDonHang(orderId) {
     if (orderDetailLoading)
@@ -452,15 +556,17 @@ export async function mountAccount() {
     if (!selectedOrder || String(selectedOrder.id) !== orderId) return "";
 
     const items = Array.isArray(selectedOrder.items) ? selectedOrder.items : [];
+    const orderCompleted = selectedOrder.status === "completed";
     const itemMarkup = items.length
       ? items
           .map((item) => {
             const image = getProductImageUrl(item.product_image);
+            const productId = item.product_id == null ? "" : String(item.product_id);
             return `<div class="account-order-product">
             <div class="account-order-product-image">${image ? `<img src="${escapeHTML(image)}" alt="${escapeHTML(item.product_name || "Sản phẩm")}" data-order-image />` : "<span>❋</span>"}</div>
-            <div class="account-order-product-content"><strong>${escapeHTML(item.product_name || "Sản phẩm")}</strong><span>${Number(item.quantity) || 0} × ${escapeHTML(formatCurrency(item.unit_price))}</span></div>
+            <div class="account-order-product-content"><strong>${escapeHTML(item.product_name || "Sản phẩm")}</strong><span>${Number(item.quantity) || 0} × ${escapeHTML(formatCurrency(item.unit_price))}</span>${hienThiTrangThaiDanhGia(productId, orderCompleted)}</div>
             <strong class="account-order-product-tong">${escapeHTML(formatCurrency(item.line_total))}</strong>
-          </div>`;
+          </div>${hienThiBieuMauDanhGia(productId, item.product_name)}`;
           })
           .join("")
       : '<p class="account-order-detail-empty">Đơn hàng không có thông tin sản phẩm.</p>';
@@ -560,12 +666,14 @@ export async function mountAccount() {
       if (selectedOrderId === orderId && selectedOrder) {
         selectedOrderId = null;
         selectedOrder = null;
+        reviewFormProductId = "";
         orderDetailError = "";
         hienThiTrangTaiKhoan();
         return;
       }
       selectedOrderId = orderId;
       selectedOrder = null;
+      reviewFormProductId = "";
       orderDetailError = "";
       orderDetailLoading = true;
       hienThiTrangTaiKhoan();
@@ -584,6 +692,28 @@ export async function mountAccount() {
         orderDetailLoading = false;
         hienThiTrangTaiKhoan();
       }
+      if (selectedOrder && String(selectedOrder.id) === orderId) {
+        void taiDieuKienDanhGiaDonHang(selectedOrder);
+      }
+      return;
+    }
+    const reviewOpenButton = event.target.closest("[data-order-review-open]");
+    if (reviewOpenButton) {
+      const productId = reviewOpenButton.dataset.orderReviewOpen;
+      if (reviewEligibilityByProduct.get(productId)?.state !== "eligible") return;
+      reviewFormProductId = productId;
+      hienThiTrangTaiKhoan();
+      return;
+    }
+    const reviewCancelButton = event.target.closest("[data-order-review-cancel]");
+    if (reviewCancelButton) {
+      reviewFormProductId = "";
+      hienThiTrangTaiKhoan();
+      return;
+    }
+    const reviewRetryButton = event.target.closest("[data-order-review-retry]");
+    if (reviewRetryButton && selectedOrder) {
+      await taiDieuKienDanhGiaDonHang(selectedOrder, true);
       return;
     }
     if (event.target.closest("[data-new-address-detail]")) {
@@ -735,6 +865,18 @@ export async function mountAccount() {
   });
 
   root.addEventListener("input", (event) => {
+    if (
+      tab === "profile" &&
+      ["full_name", "phone", "address"].includes(event.target.name)
+    ) {
+      profileDraft ||= {
+        full_name: user.full_name || "",
+        phone: user.phone || "",
+        address: user.address || "",
+      };
+      profileDraft[event.target.name] = event.target.value;
+      return;
+    }
     if (tab !== "addresses" || !addressFormOpen || !addressDraft) return;
     if (
       event.target.name === "recipient_name" ||
@@ -770,6 +912,35 @@ export async function mountAccount() {
     }
   });
   root.addEventListener("change", async (event) => {
+    if (event.target.matches("[data-account-review-images]")) {
+      const files = Array.from(event.target.files || []);
+      const feedback = event.target.form.querySelector("[data-account-review-feedback]");
+      const invalid = files.find((file) =>
+        !/^image\/(jpeg|png|webp|gif)$/.test(file.type) ||
+        file.size <= 0 ||
+        file.size > 5 * 1024 * 1024,
+      );
+      if (files.length > 5 || invalid) {
+        event.target.value = "";
+        feedback.hidden = false;
+        feedback.textContent = files.length > 5
+          ? "Mỗi đánh giá tối đa 5 ảnh."
+          : "Ảnh phải là JPG, PNG, WEBP hoặc GIF và không quá 5 MB.";
+        event.target.form.querySelector("[data-account-review-preview]").replaceChildren();
+        return;
+      }
+      feedback.hidden = true;
+      const preview = event.target.form.querySelector("[data-account-review-preview]");
+      preview.replaceChildren(...files.map((file) => {
+        const image = document.createElement("img");
+        image.alt = `Ảnh xem trước ${file.name}`;
+        image.src = URL.createObjectURL(file);
+        image.onload = () => URL.revokeObjectURL(image.src);
+        image.onerror = () => URL.revokeObjectURL(image.src);
+        return image;
+      }));
+      return;
+    }
     if (event.target.matches("[data-avatar-file]")) {
       const file = event.target.files?.[0];
       if (!file) return;
@@ -800,12 +971,75 @@ export async function mountAccount() {
       addressDraft.is_default = event.target.checked;
   });
   root.addEventListener("submit", async (event) => {
+    if (event.target.matches("[data-account-review-form]")) {
+      event.preventDefault();
+      const form = event.target;
+      const productId = form.dataset.accountReviewForm;
+      const feedback = form.querySelector("[data-account-review-feedback]");
+      const submitButton = form.querySelector('button[type="submit"]');
+      const belongsToCompletedOrder =
+        selectedOrder?.status === "completed" &&
+        Array.isArray(selectedOrder.items) &&
+        selectedOrder.items.some((item) => String(item.product_id) === productId);
+      if (
+        !belongsToCompletedOrder ||
+        reviewEligibilityByProduct.get(productId)?.state !== "eligible" ||
+        reviewSubmissions.has(productId)
+      ) {
+        feedback.hidden = false;
+        feedback.textContent = "Không thể gửi đánh giá: hãy xác nhận sản phẩm thuộc đơn đã hoàn thành và chưa được đánh giá.";
+        return;
+      }
+      if (!form.reportValidity()) return;
+
+      const values = new FormData(form);
+      const files = values.getAll("images").filter((file) => file instanceof File && file.size > 0);
+      if (files.length > 5 || files.some((file) =>
+        !/^image\/(jpeg|png|webp|gif)$/.test(file.type) ||
+        file.size > 5 * 1024 * 1024,
+      )) {
+        feedback.hidden = false;
+        feedback.textContent = "Chọn tối đa 5 ảnh JPG, PNG, WEBP hoặc GIF, mỗi ảnh không quá 5 MB.";
+        return;
+      }
+
+      reviewSubmissions.add(productId);
+      submitButton.disabled = true;
+      feedback.hidden = false;
+      feedback.textContent = "Đang gửi đánh giá...";
+      try {
+        await guiYeuCauTaiKhoanNoiBo(
+          `/products/${encodeURIComponent(productId)}/reviews`,
+          { method: "POST", body: values },
+        );
+        reviewEligibilityByProduct.set(productId, {
+          state: "reviewed",
+          canReview: false,
+          hasReviewed: true,
+        });
+        reviewFormProductId = "";
+        message = `Đã gửi đánh giá cho sản phẩm ${form.querySelector("h3")?.textContent || "đã chọn"}.`;
+        messageType = "success";
+        hienThiTrangTaiKhoan();
+      } catch (error) {
+        feedback.textContent = error.message || "Không thể gửi đánh giá.";
+        submitButton.disabled = false;
+      } finally {
+        reviewSubmissions.delete(productId);
+      }
+      return;
+    }
     if (event.target.matches("[data-profile-form]")) {
       event.preventDefault();
       if (saving) return;
       const values = new FormData(event.target);
       const fullName = String(values.get("full_name") || "").trim();
       const phone = String(values.get("phone") || "").trim();
+      profileDraft = {
+        full_name: fullName,
+        phone,
+        address: String(values.get("address") || "").trim(),
+      };
       if (!fullName || fullName.length > 100 || phone.length > 20) {
         hienThongBaoTaiKhoan(
           "Vui lòng kiểm tra họ tên và số điện thoại.",
@@ -821,7 +1055,7 @@ export async function mountAccount() {
           body: JSON.stringify({
             full_name: fullName,
             phone,
-            address: String(values.get("address") || "").trim(),
+            address: profileDraft.address,
           }),
         });
         if (!result.user)
@@ -829,6 +1063,7 @@ export async function mountAccount() {
             "Máy chủ không trả thông tin tài khoản sau khi cập nhật.",
           );
         capNhatNguoiDung(result.user);
+        profileDraft = null;
         message = "Thông tin tài khoản đã được cập nhật.";
         messageType = "success";
       } catch (error) {

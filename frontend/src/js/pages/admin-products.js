@@ -3,6 +3,9 @@ import { escapeHTML, formatPrice } from "../components/product-card.js";
 
 const AUTH_KEY = "anh-nguyet-auth";
 const PAGE_SIZE = 12;
+const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
+const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
+const ALLOWED_IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "webp", "gif"]);
 
 function normalizeText(value = "") {
   return String(value)
@@ -39,6 +42,7 @@ export async function mountAdminProducts() {
   const saveButton = document.querySelector("[data-product-save]");
   const previewImage = document.querySelector("[data-product-preview-image]");
   const previewEmpty = document.querySelector("[data-product-image-empty]");
+  const imageFileInput = document.querySelector("[data-product-image-file]");
   const session = readSession();
   if (!session?.token) {
     window.location.replace("admin-login.html?returnTo=admin-products.html");
@@ -50,6 +54,8 @@ export async function mountAdminProducts() {
   let loading = false;
   let saving = false;
   const pendingAvailability = new Set();
+  const pendingDeletion = new Set();
+  let previewObjectUrl = "";
 
   function showMessage(text, isError = false) {
     message.textContent = text;
@@ -133,6 +139,7 @@ export async function mountAdminProducts() {
       const image = getProductImageUrl(product.image);
       const active = product.active !== false && product.active !== 0;
       const busy = pendingAvailability.has(id);
+      const deleting = pendingDeletion.has(id);
       return `<tr>
         <td><div class="admin-product-table-image"><span data-admin-product-image-empty ${image ? "hidden" : ""}>❋</span>${image ? `<img src="${escapeHTML(image)}" alt="${escapeHTML(product.name || "Sản phẩm")}" loading="lazy" data-admin-product-image />` : ""}</div></td>
         <td class="admin-product-id">#${escapeHTML(id)}</td>
@@ -141,7 +148,7 @@ export async function mountAdminProducts() {
         <td class="admin-product-price">${formatPrice(product.price)}</td>
         <td>${Number.isFinite(Number(product.stock)) ? Number(product.stock) : "—"}</td>
         <td><span class="admin-product-status ${active ? "is-active" : "is-inactive"}">${active ? "Đang kinh doanh" : "Ngừng kinh doanh"}</span>${product.featured ? '<small class="admin-product-featured">Nổi bật</small>' : ""}</td>
-        <td><div class="admin-product-actions"><button type="button" data-edit-product="${escapeHTML(id)}">Sửa</button><button type="button" class="${active ? "is-danger" : ""}" data-toggle-product="${escapeHTML(id)}" ${busy ? "disabled" : ""}>${busy ? "Đang lưu..." : active ? "Ngừng kinh doanh" : "Kích hoạt"}</button></div></td>
+        <td><div class="admin-product-actions"><button type="button" data-edit-product="${escapeHTML(id)}" ${busy || deleting ? "disabled" : ""}>Sửa</button><button type="button" class="${active ? "is-danger" : ""}" data-toggle-product="${escapeHTML(id)}" ${busy || deleting ? "disabled" : ""}>${busy ? "Đang lưu..." : active ? "Ngừng kinh doanh" : "Kích hoạt"}</button><button type="button" class="is-danger" data-delete-product="${escapeHTML(id)}" ${busy || deleting ? "disabled" : ""}>${deleting ? "Đang xóa..." : "Xóa"}</button></div></td>
       </tr>`;
     }).join("");
     bindImageFallbacks();
@@ -179,6 +186,10 @@ export async function mountAdminProducts() {
   }
 
   function updateImagePreview() {
+    if (previewObjectUrl) {
+      URL.revokeObjectURL(previewObjectUrl);
+      previewObjectUrl = "";
+    }
     const value = String(form.elements.image.value || "").trim();
     const url = getProductImageUrl(value);
     previewImage.hidden = !url;
@@ -188,7 +199,22 @@ export async function mountAdminProducts() {
     if (url) previewImage.src = url;
   }
 
+  function clearPreviewObjectUrl() {
+    if (!previewObjectUrl) return;
+    URL.revokeObjectURL(previewObjectUrl);
+    previewObjectUrl = "";
+  }
+
+  function previewSelectedImage(file) {
+    clearPreviewObjectUrl();
+    previewObjectUrl = URL.createObjectURL(file);
+    previewImage.hidden = false;
+    previewEmpty.hidden = true;
+    previewImage.src = previewObjectUrl;
+  }
+
   function openForm(product = null) {
+    clearPreviewObjectUrl();
     form.reset();
     formMessage.hidden = true;
     form.elements.id.value = product ? getProductId(product) : "";
@@ -220,6 +246,20 @@ export async function mountAdminProducts() {
       formMessage.hidden = false;
       return;
     }
+    const selectedImage = imageFileInput.files?.[0] || null;
+    if (selectedImage) {
+      const extension = selectedImage.name.split(".").pop()?.toLowerCase() || "";
+      if (
+        !ALLOWED_IMAGE_TYPES.has(selectedImage.type) ||
+        !ALLOWED_IMAGE_EXTENSIONS.has(extension) ||
+        selectedImage.size <= 0 ||
+        selectedImage.size > MAX_IMAGE_SIZE
+      ) {
+        formMessage.textContent = "Ảnh phải là JPG, PNG, WEBP hoặc GIF và không vượt quá 5 MB.";
+        formMessage.hidden = false;
+        return;
+      }
+    }
     const payload = {
       name: form.elements.name.value.trim(),
       description: form.elements.description.value,
@@ -241,10 +281,13 @@ export async function mountAdminProducts() {
     saveButton.textContent = "Đang lưu...";
     form.setAttribute("aria-busy", "true");
     try {
+      const body = new FormData();
+      for (const [key, value] of Object.entries(payload)) body.append(key, String(value));
+      if (selectedImage) body.append("imageFile", selectedImage);
       const result = await apiRequest(id ? `/products/${encodeURIComponent(id)}` : "/products", {
         method: id ? "PUT" : "POST",
         headers: { Authorization: `Bearer ${session.token}` },
-        body: JSON.stringify(payload),
+        body,
       });
       if (!result.data) throw new Error("Máy chủ chưa xác nhận sản phẩm đã được lưu.");
       if (id) {
@@ -254,6 +297,7 @@ export async function mountAdminProducts() {
       }
       renderCategories();
       currentPage = 1;
+      clearPreviewObjectUrl();
       dialog.close();
       render();
       showMessage(result.message || (id ? "Đã cập nhật sản phẩm." : "Đã thêm sản phẩm."));
@@ -271,7 +315,7 @@ export async function mountAdminProducts() {
   async function toggleAvailability(button) {
     const id = button.dataset.toggleProduct;
     const product = products.find((item) => getProductId(item) === id);
-    if (!product || pendingAvailability.has(id)) return;
+    if (!product || pendingAvailability.has(id) || pendingDeletion.has(id)) return;
     const isActive = product.active !== false && product.active !== 0;
     const action = isActive ? "ngừng kinh doanh" : "kích hoạt lại";
     if (!window.confirm(`Bạn muốn ${action} sản phẩm “${product.name}”? Sản phẩm và dữ liệu liên quan sẽ được giữ nguyên.`)) return;
@@ -296,15 +340,78 @@ export async function mountAdminProducts() {
     }
   }
 
+  async function deleteProduct(button) {
+    const id = button.dataset.deleteProduct;
+    const product = products.find((item) => getProductId(item) === id);
+    if (!product || pendingDeletion.has(id) || pendingAvailability.has(id)) return;
+    if (!window.confirm(`Xác nhận xóa sản phẩm “${product.name}” (mã #${id})? Nếu dữ liệu liên quan đang tham chiếu sản phẩm, Backend sẽ từ chối thao tác.`)) return;
+
+    pendingDeletion.add(id);
+    render();
+    let feedback = "";
+    let feedbackIsError = false;
+    try {
+      const result = await apiRequest(`/products/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${session.token}` },
+      });
+      if (result.success !== true) throw new Error("Máy chủ chưa xác nhận đã xóa sản phẩm.");
+      products = products.filter((item) => getProductId(item) !== id);
+      renderCategories();
+      const pageCount = Math.max(1, Math.ceil(getFilteredProducts().length / PAGE_SIZE));
+      currentPage = Math.min(currentPage, pageCount);
+      feedback = result.message || "Đã xóa sản phẩm.";
+    } catch (error) {
+      if (error.status === 404) {
+        products = products.filter((item) => getProductId(item) !== id);
+        renderCategories();
+        currentPage = Math.min(currentPage, Math.max(1, Math.ceil(getFilteredProducts().length / PAGE_SIZE)));
+      }
+      feedback = error.message || "Không thể xóa sản phẩm.";
+      feedbackIsError = true;
+    } finally {
+      pendingDeletion.delete(id);
+      render();
+      if (feedback) showMessage(feedback, feedbackIsError);
+    }
+  }
+
   document.querySelector("[data-product-add]").addEventListener("click", () => openForm());
   previewImage.addEventListener("error", () => {
+    if (previewObjectUrl) return;
     previewImage.hidden = true;
     previewEmpty.textContent = "Không tải được ảnh từ đường dẫn này.";
     previewEmpty.hidden = false;
   });
   document.querySelectorAll("[data-product-close]").forEach((button) => button.addEventListener("click", () => dialog.close()));
   form.addEventListener("submit", saveProduct);
-  form.elements.image.addEventListener("input", updateImagePreview);
+  form.elements.image.addEventListener("input", () => {
+    if (imageFileInput.files?.length) imageFileInput.value = "";
+    updateImagePreview();
+  });
+  imageFileInput.addEventListener("change", () => {
+    const file = imageFileInput.files?.[0];
+    if (!file) {
+      updateImagePreview();
+      return;
+    }
+    const extension = file.name.split(".").pop()?.toLowerCase() || "";
+    if (
+      !ALLOWED_IMAGE_TYPES.has(file.type) ||
+      !ALLOWED_IMAGE_EXTENSIONS.has(extension) ||
+      file.size <= 0 ||
+      file.size > MAX_IMAGE_SIZE
+    ) {
+      imageFileInput.value = "";
+      formMessage.textContent = "Ảnh phải là JPG, PNG, WEBP hoặc GIF và không vượt quá 5 MB.";
+      formMessage.hidden = false;
+      updateImagePreview();
+      return;
+    }
+    formMessage.hidden = true;
+    previewSelectedImage(file);
+  });
+  dialog.addEventListener("close", clearPreviewObjectUrl);
   dialog.addEventListener("click", (event) => {
     if (event.target === dialog) dialog.close();
   });
@@ -326,6 +433,8 @@ export async function mountAdminProducts() {
     }
     const toggleButton = event.target.closest("[data-toggle-product]");
     if (toggleButton) void toggleAvailability(toggleButton);
+    const deleteButton = event.target.closest("[data-delete-product]");
+    if (deleteButton) void deleteProduct(deleteButton);
   });
 
   await loadProducts();

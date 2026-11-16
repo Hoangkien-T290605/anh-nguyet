@@ -6,6 +6,7 @@ const ADMIN_DESTINATIONS = new Set([
   "admin-dashboard.html",
   "admin-products.html",
   "admin-categories.html",
+  "admin-customers.html",
   "admin-orders.html",
   "admin-reviews.html",
 ]);

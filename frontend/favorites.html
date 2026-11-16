@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#7041a6" />
+    <link rel="stylesheet" href="./site.css" />
+    <title>Sản phẩm yêu thích | Ánh Nguyệt</title>
+  </head>
+  <body data-page="favorites">
+    <div class="site-shell">
+      <div id="site-header"></div>
+      <div id="page-content">
+        <main class="account-page">
+          <div class="products-page-primary">
+            <nav class="cart-breadcrumb" aria-label="Đường dẫn">
+              <a href="index.html">TRANG CHỦ</a><span>/</span><span>YÊU THÍCH</span>
+            </nav>
+            <section class="cart-heading">
+              <p>ÁNH NGUYỆT COLLECTION</p>
+              <h1>SẢN PHẨM YÊU THÍCH</h1>
+              <span>Danh sách được đồng bộ theo tài khoản của bạn.</span>
+            </section>
+            <p id="favorites-status" class="loading-message" role="status" aria-live="polite">Đang tải danh sách yêu thích...</p>
+            <div class="product-grid" id="favorites-grid" hidden></div>
+          </div>
+        </main>
+      </div>
+      <div id="footer-container"></div>
+    </div>
+    <div class="toast-notification" id="page-toast-notification" role="status" aria-live="polite" hidden></div>
+    <script src="./config.js"></script>
+    <script type="module" src="./src/js/main.js"></script>
+  </body>
+</html>

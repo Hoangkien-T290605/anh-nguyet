@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#7041a6" />
+    <link rel="stylesheet" href="./site.css" />
+    <title>Liên hệ | Ánh Nguyệt</title>
+  </head>
+  <body data-page="contact">
+    <div class="site-shell">
+      <div id="site-header"></div>
+      <div id="page-content">
+        <main class="information-page">
+          <nav class="cart-breadcrumb" aria-label="Đường dẫn">
+            <a href="index.html">TRANG CHỦ</a><span>/</span><span>LIÊN HỆ</span>
+          </nav>
+          <section class="information-hero">
+            <p>ÁNH NGUYỆT COLLECTION</p>
+            <h1>Liên hệ với chúng tôi</h1>
+            <span>Gửi câu hỏi qua email hỗ trợ của Ánh Nguyệt.</span>
+          </section>
+          <section class="information-card contact-page-card">
+            <h2>Thông tin hỗ trợ</h2>
+            <p>Email: <a href="mailto:anhnguyet.moonlightrice@gmail.com">anhnguyet.moonlightrice@gmail.com</a></p>
+            <p>Điện thoại: <a href="tel:0387536592">0387536592</a></p>
+            <p>Địa chỉ hiển thị theo thông tin liên hệ hiện có trên website: 149D, Nguyễn Văn Trường, Ninh Kiều, Cần Thơ.</p>
+          </section>
+          <section class="information-card">
+            <h2>Biểu mẫu liên hệ</h2>
+            <p class="contact-form-note">Biểu mẫu sẽ mở ứng dụng email trên thiết bị của bạn. Website hiện chưa có API lưu hoặc gửi yêu cầu liên hệ trực tiếp.</p>
+            <form class="contact-form" id="contact-form">
+              <label>Họ tên<input name="name" autocomplete="name" maxlength="100" required /></label>
+              <label>Email<input name="email" type="email" autocomplete="email" maxlength="150" required /></label>
+              <label>Tiêu đề<input name="subject" maxlength="150" required /></label>
+              <label>Nội dung<textarea name="message" rows="5" maxlength="4000" required></textarea></label>
+              <p id="contact-status" role="status" aria-live="polite" hidden></p>
+              <button class="information-action" type="submit">Mở ứng dụng email</button>
+            </form>
+          </section>
+        </main>
+      </div>
+      <div id="footer-container"></div>
+    </div>
+    <script src="./config.js"></script>
+    <script type="module" src="./src/js/main.js"></script>
+  </body>
+</html>

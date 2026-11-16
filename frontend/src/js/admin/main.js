@@ -64,6 +64,9 @@ async function startAdminPage() {
     } else if (page === "categories") {
       const { mountAdminCategories } = await import("../pages/admin-categories.js");
       await mountAdminCategories();
+    } else if (page === "customers") {
+      const { mountAdminCustomers } = await import("../pages/admin-customers.js");
+      await mountAdminCustomers();
     } else if (page === "orders") {
       const { mountAdminOrders } = await import("../pages/admin-orders.js");
       await mountAdminOrders();

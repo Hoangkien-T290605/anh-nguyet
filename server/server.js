@@ -13,14 +13,19 @@ require("dotenv").config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+const DATABASE_NAME = process.env.DB_NAME || "anh_nguyet";
 
 // =========================
 // CẤU HÌNH UPLOAD ẢNH
 // =========================
 
 const avatarDirectory = path.join(__dirname, "uploads", "avatars");
+const reviewImageDirectory = path.join(__dirname, "uploads", "reviews");
+const productImageDirectory = path.join(__dirname, "uploads", "products");
 
 fs.mkdirSync(avatarDirectory, { recursive: true });
+fs.mkdirSync(reviewImageDirectory, { recursive: true });
+fs.mkdirSync(productImageDirectory, { recursive: true });
 
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
@@ -51,13 +56,134 @@ const uploadAvatar = multer({
     files: 1,
   },
   fileFilter: (req, file, callback) => {
-    if (!allowedImageTypes[file.mimetype]) {
+    if (!Object.hasOwn(allowedImageTypes, file.mimetype)) {
       return callback(new Error("Chỉ chấp nhận ảnh JPG, PNG, WEBP hoặc GIF"));
     }
 
     callback(null, true);
   },
 }).single("avatar");
+
+// Ảnh mới lưu cạnh Backend; ảnh cũ trong frontend/images/products vẫn được phục vụ riêng.
+const productImageStorage = multer.diskStorage({
+  destination: (req, file, callback) => {
+    fs.mkdir(productImageDirectory, { recursive: true }, (error) =>
+      callback(error, productImageDirectory),
+    );
+  },
+  filename: (req, file, callback) => {
+    const extension = Object.hasOwn(allowedImageTypes, file.mimetype)
+      ? allowedImageTypes[file.mimetype]
+      : ".bin";
+    const productName = String(req.body?.name || "san_pham")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/đ/gi, "d")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "")
+      .slice(0, 60) || "san_pham";
+    callback(
+      null,
+      `${productName}_${Date.now()}_${crypto.randomBytes(8).toString("hex")}${extension}`,
+    );
+  },
+});
+
+const uploadProductImage = multer({
+  storage: productImageStorage,
+  limits: { fileSize: 5 * 1024 * 1024, files: 1 },
+  fileFilter: (req, file, callback) => {
+    if (!Object.hasOwn(allowedImageTypes, file.mimetype)) {
+      return callback(new Error("Ảnh sản phẩm chỉ hỗ trợ JPG, PNG, WEBP hoặc GIF"));
+    }
+    callback(null, true);
+  },
+}).single("imageFile");
+
+function nhanDangDinhDangAnh(buffer) {
+  if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) return "image/jpeg";
+  if (buffer.length >= 8 && buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return "image/png";
+  if (buffer.length >= 6 && ["GIF87a", "GIF89a"].includes(buffer.toString("ascii", 0, 6))) return "image/gif";
+  if (buffer.length >= 12 && buffer.toString("ascii", 0, 4) === "RIFF" && buffer.toString("ascii", 8, 12) === "WEBP") return "image/webp";
+  return "";
+}
+
+async function xoaTepAnhSanPham(file) {
+  if (!file?.path) return;
+  try {
+    await fs.promises.unlink(file.path);
+  } catch (error) {
+    if (error.code !== "ENOENT") console.error("Lỗi dọn ảnh sản phẩm chưa liên kết:", error.code || "UNKNOWN");
+  }
+}
+
+async function xoaAnhSanPhamNeuKhongDuocThamChieu(imageUrl) {
+  const prefix = "/uploads/products/";
+  if (typeof imageUrl !== "string" || !imageUrl.startsWith(prefix)) return;
+  const filename = path.basename(imageUrl);
+  if (!filename || filename === "." || filename === "..") return;
+  try {
+    const [references] = await pool.execute(
+      `SELECT 1 FROM products WHERE image = ?
+       UNION ALL
+       SELECT 1 FROM order_items WHERE product_image = ?
+       LIMIT 1`,
+      [imageUrl, imageUrl],
+    );
+    if (references.length) return;
+    await fs.promises.unlink(path.join(productImageDirectory, filename));
+  } catch (error) {
+    if (error.code !== "ENOENT") {
+      console.error("Lỗi dọn ảnh sản phẩm không còn tham chiếu:", error.code || "UNKNOWN");
+    }
+  }
+}
+
+function xuLyUploadAnhSanPham(req, res, next) {
+  uploadProductImage(req, res, async (error) => {
+    if (error) {
+      await xoaTepAnhSanPham(req.file);
+      const message = error instanceof multer.MulterError && error.code === "LIMIT_FILE_SIZE"
+        ? "Ảnh sản phẩm không được vượt quá 5 MB"
+        : error.message || "Không thể tải ảnh sản phẩm lên";
+      return res.status(400).json({ success: false, message });
+    }
+
+    try {
+      req.body ||= {};
+      if (req.file) {
+        const content = await fs.promises.readFile(req.file.path);
+        if (nhanDangDinhDangAnh(content) !== req.file.mimetype) {
+          await xoaTepAnhSanPham(req.file);
+          return res.status(400).json({ success: false, message: "Nội dung tệp không khớp định dạng ảnh được hỗ trợ" });
+        }
+      }
+
+      for (const field of ["active", "featured"]) {
+        if (req.body[field] === "true") req.body[field] = true;
+        if (req.body[field] === "false") req.body[field] = false;
+      }
+      next();
+    } catch (validationError) {
+      await xoaTepAnhSanPham(req.file);
+      console.error("Lỗi kiểm tra ảnh sản phẩm:", validationError.code || "UNKNOWN");
+      return res.status(400).json({ success: false, message: "Không thể xác minh tệp ảnh sản phẩm" });
+    }
+  });
+}
+
+// Giữ ảnh trong bộ nhớ đến khi đã xác minh điều kiện nghiệp vụ, sau đó lưu cục bộ.
+const reviewUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024, files: 5 },
+  fileFilter: (req, file, callback) => {
+    if (!allowedImageTypes[file.mimetype]) {
+      return callback(new Error("Ảnh đánh giá chỉ hỗ trợ JPG, PNG, WEBP hoặc GIF"));
+    }
+    callback(null, true);
+  },
+}).array("images", 5);
 
 // Xóa ảnh đại diện cũ chỉ khi đường dẫn thuộc thư mục upload của ứng dụng.
 async function xoaAnhDaiDienCu(avatarUrl) {
@@ -77,11 +203,16 @@ async function xoaAnhDaiDienCu(avatarUrl) {
   const filePath = path.join(avatarDirectory, filename);
 
   try {
+    const [references] = await pool.execute(
+      "SELECT 1 FROM users WHERE avatar_url = ? LIMIT 1",
+      [avatarUrl],
+    );
+    if (references.length) return;
     await fs.promises.unlink(filePath);
     console.log("Đã xóa ảnh đại diện cũ:", filename);
   } catch (error) {
     if (error.code !== "ENOENT") {
-      console.error("Lỗi xóa ảnh đại diện cũ:", error.message);
+      console.error("Lỗi xóa ảnh đại diện cũ:", error.code || "UNKNOWN");
     }
   }
 }
@@ -94,7 +225,7 @@ const boKetNoiGoc = mysql.createPool({
   port: Number(process.env.DB_PORT) || 3306,
   user: process.env.DB_USER || "root",
   password: process.env.DB_PASSWORD,
-  database: process.env.DB_NAME || "anh_nguyet",
+  database: DATABASE_NAME,
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
@@ -109,6 +240,8 @@ const tenBangViet = {
   orders: "don_hang",
   order_items: "chi_tiet_don_hang",
   user_cart_items: "chi_tiet_gio_hang",
+  vouchers: "ma_giam_gia",
+  voucher_redemptions: "luot_su_dung_ma_giam_gia",
 };
 
 // Ánh xạ cột theo từng bảng; phản hồi API vẫn dùng các khóa JSON cũ.
@@ -154,9 +287,11 @@ const tenCotViet = {
     id: "ma_danh_gia",
     product_id: "ma_san_pham",
     customer_name: "ten_khach_hang",
+    customer_id: "ma_nguoi_dung",
     rating: "so_sao",
     comment: "noi_dung",
     media: "tep_dinh_kem",
+    is_visible: "dang_hien_thi",
     created_at: "ngay_tao",
   },
   orders: {
@@ -176,6 +311,37 @@ const tenCotViet = {
     updated_at: "ngay_cap_nhat",
     idempotency_key: "ma_yeu_cau",
     request_fingerprint: "dau_van_tay_yeu_cau",
+    voucher_id: "ma_chuong_trinh_giam_gia",
+    voucher_code: "ma_voucher_luc_dat",
+    voucher_campaign_name: "ten_chuong_trinh_luc_dat",
+    voucher_discount_type: "loai_giam_luc_dat",
+    voucher_discount_value: "gia_tri_giam_luc_dat",
+    discount_amount: "so_tien_giam",
+  },
+  vouchers: {
+    id: "ma_chuong_trinh",
+    code: "ma_voucher",
+    campaign_name: "ten_chuong_trinh",
+    discount_type: "loai_giam",
+    discount_value: "gia_tri_giam",
+    minimum_subtotal: "don_hang_toi_thieu",
+    maximum_discount: "giam_toi_da",
+    quantity_limit: "so_luong_phat_hanh",
+    used_count: "so_luot_su_dung",
+    starts_at: "bat_dau_luc",
+    ends_at: "ket_thuc_luc",
+    is_active: "dang_kich_hoat",
+    created_at: "ngay_tao",
+    updated_at: "ngay_cap_nhat",
+  },
+  voucher_redemptions: {
+    id: "ma_luot_su_dung",
+    voucher_id: "ma_chuong_trinh_giam_gia",
+    order_id: "ma_don_hang",
+    customer_id: "ma_nguoi_dung",
+    voucher_code_snapshot: "ma_voucher_luc_dat",
+    discount_amount: "so_tien_giam",
+    created_at: "ngay_tao",
   },
   order_items: {
     id: "ma_chi_tiet",
@@ -226,6 +392,17 @@ const tuKhoaSql = new Set([
 
 // Chỉ dịch tên định danh khi database đang dùng schema vật lý tiếng Việt.
 let coSoDuLieuDungTenViet = false;
+let coBangYeuThich = false;
+let coCotDanhGiaTaiKhoan = false;
+let coBangDanhGia = false;
+let coBangVoucher = false;
+let coCotVoucherDonHang = false;
+
+function cotVoucherDonHangSelect() {
+  return coBangVoucher && coCotVoucherDonHang
+    ? ", voucher_id, voucher_code, voucher_campaign_name, voucher_discount_type, voucher_discount_value, discount_amount"
+    : ", NULL AS voucher_id, NULL AS voucher_code, NULL AS voucher_campaign_name, NULL AS voucher_discount_type, NULL AS voucher_discount_value, 0 AS discount_amount";
+}
 
 // Dịch các định danh SQL trước khi gửi truy vấn đến MySQL.
 function vietLaiCauSql(sql) {
@@ -405,6 +582,8 @@ function chuanHoaSanPham(row) {
     _id: String(row.id),
     price: Number(row.price),
     stock: Number(row.stock),
+    average_rating: Number(row.average_rating || 0),
+    review_count: Number(row.review_count || 0),
     featured: Boolean(row.featured),
     active: Boolean(row.active),
   };
@@ -430,9 +609,99 @@ function chuanHoaDanhGia(row) {
     ...row,
     id: Number(row.id),
     product_id: Number(row.product_id),
+    customer_id: row.customer_id == null ? null : Number(row.customer_id),
     rating: Number(row.rating),
+    is_visible: row.is_visible === undefined ? true : Boolean(row.is_visible),
     media,
   };
+}
+
+// Serializer công khai chỉ phát các trường cần cho giao diện, không lộ mã tài khoản.
+function chuanHoaDanhGiaCongKhai(row) {
+  const review = chuanHoaDanhGia(row);
+  return {
+    id: review.id,
+    product_id: review.product_id,
+    customer_name: review.customer_name,
+    rating: review.rating,
+    comment: review.comment,
+    media: review.media,
+    created_at: review.created_at,
+    ...(row.is_mine !== undefined ? { is_mine: Boolean(row.is_mine) } : {}),
+  };
+}
+
+// Serializer riêng cho chủ đánh giá; trạng thái ẩn chỉ lộ cho chính chủ tài khoản.
+function chuanHoaDanhGiaCuaToi(row) {
+  const review = chuanHoaDanhGia(row);
+  return {
+    id: review.id,
+    product_id: review.product_id,
+    customer_name: review.customer_name,
+    rating: review.rating,
+    comment: review.comment,
+    media: review.media,
+    is_visible: review.is_visible,
+    created_at: review.created_at,
+  };
+}
+
+// Xác thực chữ ký nội dung ảnh trước khi tin MIME do trình duyệt gửi lên.
+function xacDinhDinhDangAnh(buffer) {
+  if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) return "image/jpeg";
+  if (buffer.length >= 8 && buffer.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) return "image/png";
+  if (buffer.length >= 12 && buffer.toString("ascii", 0, 4) === "RIFF" && buffer.toString("ascii", 8, 12) === "WEBP") return "image/webp";
+  if (buffer.length >= 6 && ["GIF87a", "GIF89a"].includes(buffer.toString("ascii", 0, 6))) return "image/gif";
+  return null;
+}
+
+async function luuAnhDanhGia(file) {
+  const format = xacDinhDinhDangAnh(file.buffer);
+  if (!format || format !== file.mimetype) throw new Error("Định dạng nội dung ảnh không khớp với loại tệp được khai báo");
+  const filename = `${Date.now()}-${crypto.randomBytes(12).toString("hex")}${allowedImageTypes[format]}`;
+  const filePath = path.join(reviewImageDirectory, filename);
+  try {
+    await fs.promises.writeFile(filePath, file.buffer, { flag: "wx" });
+  } catch (error) {
+    try { await fs.promises.unlink(filePath); } catch { /* Không có tệp hoàn chỉnh để dọn. */ }
+    throw error;
+  }
+  return { type: "image", url: `/uploads/reviews/${filename}` };
+}
+
+// Chỉ dọn ảnh nội bộ không còn được tham chiếu; URL ảnh ngoài máy chủ được giữ nguyên.
+async function xoaAnhDanhGiaChuaLienKet(media = []) {
+  for (const item of media) {
+    const url = typeof item === "string" ? item : item?.url;
+    const prefix = "/uploads/reviews/";
+    if (typeof url !== "string" || !url.startsWith(prefix)) continue;
+    const filename = url.slice(prefix.length);
+    if (!filename || filename !== path.basename(filename) || !/^[\w-]+\.(jpg|png|webp|gif)$/i.test(filename)) continue;
+    try {
+      const [[reference]] = await pool.execute(
+        `SELECT EXISTS(
+          SELECT 1 FROM product_reviews
+          WHERE JSON_CONTAINS(media, JSON_OBJECT('url', ?), '$')
+             OR JSON_CONTAINS(media, JSON_QUOTE(?), '$')
+        ) AS is_used`,
+        [url, url],
+      );
+      if (reference?.is_used) continue;
+      await fs.promises.unlink(path.join(reviewImageDirectory, filename));
+    } catch (error) {
+      if (error.code !== "ENOENT") {
+        console.error("Không thể dọn ảnh đánh giá chưa liên kết:", error.code || "UNKNOWN");
+      }
+    }
+  }
+}
+
+function nhanTepDanhGia(req, res, next) {
+  reviewUpload(req, res, (error) => {
+    if (!error) return next();
+    const status = error.code === "LIMIT_FILE_SIZE" || error.code === "LIMIT_FILE_COUNT" ? 400 : 400;
+    return res.status(status).json({ success: false, message: error.message || "Tệp ảnh đánh giá không hợp lệ" });
+  });
 }
 
 // Bỏ thông tin xác thực và chuẩn hóa hồ sơ người dùng trả về.
@@ -769,6 +1038,58 @@ function doiTuSoTienXu(cents) {
   return `${cents / 100n}.${String(cents % 100n).padStart(2, "0")}`;
 }
 
+function chuanHoaMaVoucher(value) {
+  if (value == null || value === "") return null;
+  if (typeof value !== "string") throw new LoiApiDonHang(400, "Mã giảm giá không hợp lệ");
+  const code = value.trim().toUpperCase();
+  if (!/^[A-Z0-9][A-Z0-9_-]{2,39}$/.test(code)) {
+    throw new LoiApiDonHang(400, "Mã giảm giá chỉ gồm chữ, số, gạch ngang hoặc gạch dưới (3–40 ký tự)");
+  }
+  return code;
+}
+
+function tinhSoTienGiam(voucher, subtotalCents) {
+  if (subtotalCents < doiSangSoTienXu(voucher.minimum_subtotal)) {
+    throw new LoiApiDonHang(409, `Đơn hàng tối thiểu ${Number(voucher.minimum_subtotal).toLocaleString("vi-VN")}đ để sử dụng mã này`);
+  }
+  let discountCents;
+  if (voucher.discount_type === "percentage") {
+    discountCents = (subtotalCents * doiSangSoTienXu(voucher.discount_value)) / 10000n;
+    if (voucher.maximum_discount != null) {
+      const cap = doiSangSoTienXu(voucher.maximum_discount);
+      if (discountCents > cap) discountCents = cap;
+    }
+  } else {
+    discountCents = doiSangSoTienXu(voucher.discount_value);
+  }
+  if (discountCents <= 0n) throw new LoiApiDonHang(409, "Giá trị đơn hàng chưa tạo được mức giảm tối thiểu");
+  return discountCents > subtotalCents ? subtotalCents : discountCents;
+}
+
+async function kiemTraVoucher(connection, code, subtotalCents, lock = false) {
+  if (!coBangVoucher || !coCotVoucherDonHang) {
+    throw new LoiApiDonHang(503, "Chức năng mã giảm giá chưa được kích hoạt trong cơ sở dữ liệu");
+  }
+  const [rows] = await connection.execute(
+    `SELECT id, code, campaign_name, discount_type, discount_value,
+            minimum_subtotal, maximum_discount, quantity_limit, used_count,
+            starts_at, ends_at, is_active,
+            starts_at <= UTC_TIMESTAMP() AS has_started,
+            ends_at >= UTC_TIMESTAMP() AS has_not_ended
+     FROM vouchers WHERE code = ? ${lock ? "FOR UPDATE" : ""}`,
+    [code],
+  );
+  const voucher = rows[0];
+  if (!voucher) throw new LoiApiDonHang(404, "Mã giảm giá không tồn tại");
+  if (!voucher.is_active) throw new LoiApiDonHang(409, "Mã giảm giá đang tạm ngừng");
+  if (!voucher.has_started) throw new LoiApiDonHang(409, "Mã giảm giá chưa đến thời gian sử dụng");
+  if (!voucher.has_not_ended) throw new LoiApiDonHang(409, "Mã giảm giá đã hết hạn");
+  if (Number(voucher.used_count) >= Number(voucher.quantity_limit)) {
+    throw new LoiApiDonHang(409, "Mã giảm giá đã hết lượt sử dụng");
+  }
+  return { voucher, discountCents: tinhSoTienGiam(voucher, subtotalCents) };
+}
+
 // Chuẩn hóa một dòng hàng lưu tại thời điểm khách đặt đơn.
 function chuanHoaChiTietDonHang(row) {
   return {
@@ -795,6 +1116,12 @@ function chuanHoaDonHang(row, items = []) {
     subtotal: Number(row.subtotal),
     shipping_fee: row.shipping_fee === null ? null : Number(row.shipping_fee),
     total_amount: Number(row.total_amount),
+    voucher_id: row.voucher_id == null ? null : Number(row.voucher_id),
+    voucher_code: row.voucher_code || null,
+    voucher_campaign_name: row.voucher_campaign_name || null,
+    voucher_discount_type: row.voucher_discount_type || null,
+    voucher_discount_value: row.voucher_discount_value == null ? null : Number(row.voucher_discount_value),
+    discount_amount: Number(row.discount_amount || 0),
     status: row.status,
     payment_method: row.payment_method || null,
     payment_status: row.payment_status || "pending",
@@ -852,6 +1179,7 @@ app.get("/api/health", async (req, res) => {
     res.json({
       success: true,
       database: "connected",
+      databaseName: DATABASE_NAME,
     });
   } catch (error) {
     console.error("Lỗi kiểm tra MySQL:", error.message);
@@ -1523,6 +1851,15 @@ app.post(
     const newAvatarUrl = `/uploads/avatars/${req.file.filename}`;
 
     try {
+      const imageContent = await fs.promises.readFile(req.file.path);
+      if (nhanDangDinhDangAnh(imageContent) !== req.file.mimetype) {
+        await xoaAnhDaiDienCu(newAvatarUrl);
+        return res.status(400).json({
+          success: false,
+          message: "Nội dung tệp không khớp định dạng ảnh được hỗ trợ",
+        });
+      }
+
       const [existingRows] = await pool.execute(
         "SELECT avatar_url FROM users WHERE id = ?",
         [req.user.id],
@@ -1559,6 +1896,7 @@ app.post(
         user: chuanHoaNguoiDung(rows[0]),
       });
     } catch (error) {
+      // Chỉ xóa nếu lần ghi tài khoản chưa liên kết ảnh mới.
       await xoaAnhDaiDienCu(newAvatarUrl);
 
       console.error("Lỗi upload ảnh đại diện:", error.message);
@@ -2101,6 +2439,7 @@ app.get("/api/checkout/config", async (req, res) => {
       success: true,
       payment_methods: ["cod"],
       shipping_fee: fee === null ? null : Number(fee),
+      voucher_available: coBangVoucher && coCotVoucherDonHang,
     });
   } catch (error) {
     console.error("Lỗi tải cấu hình checkout:", error.code || "UNKNOWN");
@@ -2111,11 +2450,175 @@ app.get("/api/checkout/config", async (req, res) => {
   }
 });
 
+function chuanHoaThoiGianVoucher(value, field) {
+  if (typeof value !== "string" || !value.trim()) {
+    throw new LoiApiDonHang(400, `${field} là bắt buộc`);
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) throw new LoiApiDonHang(400, `${field} không hợp lệ`);
+  return date.toISOString().slice(0, 19).replace("T", " ");
+}
+
+function docDuLieuVoucher(body) {
+  const code = chuanHoaMaVoucher(body?.code);
+  if (!code) throw new LoiApiDonHang(400, "Mã voucher là bắt buộc");
+  const campaignName = typeof body?.campaign_name === "string" ? body.campaign_name.trim() : "";
+  const discountType = body?.discount_type;
+  const discountValue = Number(body?.discount_value);
+  const minimumSubtotal = Number(body?.minimum_subtotal ?? 0);
+  const maximumDiscount = body?.maximum_discount == null || body.maximum_discount === "" ? null : Number(body.maximum_discount);
+  const quantityLimit = Number(body?.quantity_limit);
+  const startsAt = chuanHoaThoiGianVoucher(body?.starts_at, "Thời gian bắt đầu");
+  const endsAt = chuanHoaThoiGianVoucher(body?.ends_at, "Thời gian kết thúc");
+  if (!campaignName || campaignName.length > 150) throw new LoiApiDonHang(400, "Tên chương trình phải có từ 1 đến 150 ký tự");
+  if (!['percentage', 'fixed'].includes(discountType)) throw new LoiApiDonHang(400, "Loại giảm giá không hợp lệ");
+  const moneyFormat = (value) => /^(?:\d+)(?:\.\d{1,2})?$/.test(String(value));
+  if (!moneyFormat(body?.discount_value) || !Number.isFinite(discountValue) || discountValue <= 0 || discountValue > 9999999999.99 || (discountType === "percentage" && discountValue > 100)) {
+    throw new LoiApiDonHang(400, discountType === "percentage" ? "Giá trị phần trăm phải lớn hơn 0 và không vượt quá 100" : "Giá trị giảm tiền không hợp lệ");
+  }
+  if (!moneyFormat(body?.minimum_subtotal ?? 0) || !Number.isFinite(minimumSubtotal) || minimumSubtotal < 0 || minimumSubtotal > 999999999999.99) throw new LoiApiDonHang(400, "Đơn hàng tối thiểu không hợp lệ");
+  if (maximumDiscount !== null && (!moneyFormat(body.maximum_discount) || !Number.isFinite(maximumDiscount) || maximumDiscount <= 0 || maximumDiscount > 999999999999.99 || discountType !== "percentage")) throw new LoiApiDonHang(400, "Mức giảm tối đa chỉ áp dụng cho mã phần trăm và phải lớn hơn 0");
+  if (!Number.isSafeInteger(quantityLimit) || quantityLimit < 1 || quantityLimit > 2147483647) throw new LoiApiDonHang(400, "Số lượng phát hành phải là số nguyên dương");
+  if (new Date(endsAt + "Z") <= new Date(startsAt + "Z")) throw new LoiApiDonHang(400, "Thời gian kết thúc phải sau thời gian bắt đầu");
+  if (typeof body.is_active !== "boolean") throw new LoiApiDonHang(400, "Trạng thái kích hoạt không hợp lệ");
+  return { code, campaignName, discountType, discountValue, minimumSubtotal, maximumDiscount, quantityLimit, startsAt, endsAt, isActive: body.is_active };
+}
+
+function voucherTableUnavailable(res) {
+  if (coBangVoucher && coCotVoucherDonHang) return false;
+  res.status(503).json({ success: false, message: "Chức năng mã giảm giá chưa được kích hoạt trong cơ sở dữ liệu" });
+  return true;
+}
+
+app.get("/api/admin/vouchers", xacThucToken, yeuCauQuyenQuanTri, async (req, res) => {
+  if (voucherTableUnavailable(res)) return;
+  const page = Math.max(1, Math.min(100000, Number.parseInt(req.query.page, 10) || 1));
+  const limit = Math.max(1, Math.min(100, Number.parseInt(req.query.limit, 10) || 20));
+  const query = typeof req.query.q === "string" ? req.query.q.trim().slice(0, 100) : "";
+  const type = ["percentage", "fixed"].includes(req.query.type) ? req.query.type : "all";
+  const status = ["active", "inactive", "scheduled", "expired", "exhausted"].includes(req.query.status) ? req.query.status : "all";
+  const where = [];
+  const params = [];
+  if (query) { where.push("(code LIKE ? OR campaign_name LIKE ?)"); const term = `%${query.replace(/[\\%_]/g, "\\$&")}%`; params.push(term, term); }
+  if (type !== "all") { where.push("discount_type = ?"); params.push(type); }
+  if (status === "inactive") where.push("is_active = 0");
+  if (status === "scheduled") where.push("is_active = 1 AND starts_at > UTC_TIMESTAMP()");
+  if (status === "expired") where.push("is_active = 1 AND ends_at < UTC_TIMESTAMP()");
+  if (status === "exhausted") where.push("used_count >= quantity_limit");
+  if (status === "active") where.push("is_active = 1 AND starts_at <= UTC_TIMESTAMP() AND ends_at >= UTC_TIMESTAMP() AND used_count < quantity_limit");
+  const filter = where.length ? `WHERE ${where.join(" AND ")}` : "";
+  try {
+    const [[count]] = await pool.execute(`SELECT COUNT(*) AS total FROM vouchers ${filter}`, params);
+    const [rows] = await pool.execute(
+      `SELECT id, code, campaign_name, discount_type, discount_value, minimum_subtotal,
+              maximum_discount, quantity_limit, used_count, starts_at, ends_at, is_active,
+              CASE WHEN is_active = 0 THEN 'inactive' WHEN starts_at > UTC_TIMESTAMP() THEN 'scheduled'
+                   WHEN ends_at < UTC_TIMESTAMP() THEN 'expired' WHEN used_count >= quantity_limit THEN 'exhausted' ELSE 'active' END AS status
+       FROM vouchers ${filter} ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?`,
+      [...params, limit, (page - 1) * limit],
+    );
+    res.json({ success: true, data: rows, pagination: { page, limit, total: Number(count.total), total_pages: Math.ceil(Number(count.total) / limit) } });
+  } catch (error) {
+    console.error("Lỗi lấy mã giảm giá quản trị:", error.code || "UNKNOWN");
+    res.status(500).json({ success: false, message: "Không thể tải danh sách mã giảm giá" });
+  }
+});
+
+app.post("/api/admin/vouchers", xacThucToken, yeuCauQuyenQuanTri, async (req, res) => {
+  if (voucherTableUnavailable(res)) return;
+  try {
+    const data = docDuLieuVoucher(req.body);
+    const [result] = await pool.execute(
+      `INSERT INTO vouchers (code, campaign_name, discount_type, discount_value, minimum_subtotal,
+        maximum_discount, quantity_limit, starts_at, ends_at, is_active)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [data.code, data.campaignName, data.discountType, data.discountValue, data.minimumSubtotal, data.maximumDiscount, data.quantityLimit, data.startsAt, data.endsAt, data.isActive],
+    );
+    res.status(201).json({ success: true, message: "Đã tạo mã giảm giá", data: { id: String(result.insertId) } });
+  } catch (error) {
+    if (error instanceof LoiApiDonHang) return res.status(error.status).json({ success: false, message: error.message });
+    if (error.code === "ER_DUP_ENTRY") return res.status(409).json({ success: false, message: "Mã giảm giá đã tồn tại" });
+    console.error("Lỗi tạo mã giảm giá:", error.code || "UNKNOWN");
+    res.status(500).json({ success: false, message: "Không thể tạo mã giảm giá" });
+  }
+});
+
+app.put("/api/admin/vouchers/:id", xacThucToken, yeuCauQuyenQuanTri, async (req, res) => {
+  if (voucherTableUnavailable(res)) return;
+  const id = Number(req.params.id);
+  if (!Number.isSafeInteger(id) || id < 1) return res.status(400).json({ success: false, message: "Mã chương trình không hợp lệ" });
+  let connection;
+  try {
+    const data = docDuLieuVoucher(req.body);
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+    const [[existing]] = await connection.execute("SELECT used_count FROM vouchers WHERE id = ? FOR UPDATE", [id]);
+    if (!existing) { await connection.rollback(); return res.status(404).json({ success: false, message: "Không tìm thấy mã giảm giá" }); }
+    if (data.quantityLimit < Number(existing.used_count)) throw new LoiApiDonHang(409, "Số lượng phát hành không thể thấp hơn số lượt đã sử dụng");
+    await connection.execute(
+      `UPDATE vouchers SET code = ?, campaign_name = ?, discount_type = ?, discount_value = ?,
+        minimum_subtotal = ?, maximum_discount = ?, quantity_limit = ?, starts_at = ?, ends_at = ?, is_active = ?
+       WHERE id = ?`,
+      [data.code, data.campaignName, data.discountType, data.discountValue, data.minimumSubtotal, data.maximumDiscount, data.quantityLimit, data.startsAt, data.endsAt, data.isActive, id],
+    );
+    await connection.commit();
+    res.json({ success: true, message: "Đã cập nhật mã giảm giá" });
+  } catch (error) {
+    await connection?.rollback().catch(() => {});
+    if (error instanceof LoiApiDonHang) return res.status(error.status).json({ success: false, message: error.message });
+    if (error.code === "ER_DUP_ENTRY") return res.status(409).json({ success: false, message: "Mã giảm giá đã tồn tại" });
+    console.error("Lỗi sửa mã giảm giá:", error.code || "UNKNOWN");
+    res.status(500).json({ success: false, message: "Không thể cập nhật mã giảm giá" });
+  } finally { connection?.release(); }
+});
+
+app.patch("/api/admin/vouchers/:id/active", xacThucToken, yeuCauQuyenQuanTri, async (req, res) => {
+  if (voucherTableUnavailable(res)) return;
+  const id = Number(req.params.id);
+  if (!Number.isSafeInteger(id) || id < 1 || typeof req.body?.is_active !== "boolean") return res.status(400).json({ success: false, message: "Thông tin trạng thái mã giảm giá không hợp lệ" });
+  try {
+    const [result] = await pool.execute("UPDATE vouchers SET is_active = ? WHERE id = ?", [req.body.is_active, id]);
+    if (!result.affectedRows) return res.status(404).json({ success: false, message: "Không tìm thấy mã giảm giá" });
+    res.json({ success: true, message: req.body.is_active ? "Đã kích hoạt mã giảm giá" : "Đã tạm ngừng mã giảm giá" });
+  } catch (error) {
+    console.error("Lỗi đổi trạng thái voucher:", error.code || "UNKNOWN");
+    res.status(500).json({ success: false, message: "Không thể cập nhật trạng thái mã giảm giá" });
+  }
+});
+
+app.post("/api/vouchers/validate", async (req, res) => {
+  if (voucherTableUnavailable(res)) return;
+  try {
+    const code = chuanHoaMaVoucher(req.body?.code);
+    if (!code) throw new LoiApiDonHang(400, "Vui lòng nhập mã giảm giá");
+    if (!Array.isArray(req.body?.items) || req.body.items.length < 1 || req.body.items.length > 100) throw new LoiApiDonHang(400, "Danh sách sản phẩm không hợp lệ");
+    const items = req.body.items.map((item, index) => ({ productId: docSoNguyenDuong(item?.product_id, `Mã sản phẩm thứ ${index + 1}`), quantity: docSoNguyenDuong(item?.quantity, `Số lượng thứ ${index + 1}`) }));
+    if (new Set(items.map(({ productId }) => productId)).size !== items.length || items.some(({ quantity }) => quantity > 1000000)) throw new LoiApiDonHang(400, "Sản phẩm hoặc số lượng không hợp lệ");
+    const ids = items.map((item) => item.productId).sort((a, b) => a - b);
+    const [products] = await pool.execute(`SELECT id, price, active, stock FROM products WHERE id IN (${ids.map(() => "?").join(",")})`, ids);
+    const productMap = new Map(products.map((product) => [Number(product.id), product]));
+    let subtotalCents = 0n;
+    for (const item of items) {
+      const product = productMap.get(item.productId);
+      if (!product || !product.active || Number(product.stock) < item.quantity) throw new LoiApiDonHang(409, "Giỏ hàng có sản phẩm không còn khả dụng hoặc không đủ tồn kho");
+      subtotalCents += doiSangSoTienXu(product.price) * BigInt(item.quantity);
+    }
+    if (subtotalCents > 99999999999999n) throw new LoiApiDonHang(400, "Tổng tiền giỏ hàng vượt giới hạn cho phép");
+    const checked = await kiemTraVoucher(pool, code, subtotalCents);
+    res.json({ success: true, data: { code: checked.voucher.code, campaign_name: checked.voucher.campaign_name, discount_type: checked.voucher.discount_type, discount_value: Number(checked.voucher.discount_value), subtotal: Number(doiTuSoTienXu(subtotalCents)), discount_amount: Number(doiTuSoTienXu(checked.discountCents)), total_after_discount: Number(doiTuSoTienXu(subtotalCents - checked.discountCents)) } });
+  } catch (error) {
+    if (error instanceof LoiApiDonHang) return res.status(error.status).json({ success: false, message: error.message });
+    console.error("Lỗi xác minh mã giảm giá:", error.code || "UNKNOWN");
+    res.status(500).json({ success: false, message: "Không thể xác minh mã giảm giá" });
+  }
+});
+
 app.post("/api/orders", xacThucTokenTuyChon, async (req, res) => {
   let connection;
   let transactionStarted = false;
   let idempotencyKey = null;
   let requestFingerprint = null;
+  const voucherSelectColumns = cotVoucherDonHangSelect();
 
   try {
     const body = req.body;
@@ -2128,6 +2631,10 @@ app.post("/api/orders", xacThucTokenTuyChon, async (req, res) => {
         400,
         "Phương thức thanh toán không hợp lệ; hiện chỉ hỗ trợ COD",
       );
+    }
+    const voucherCode = chuanHoaMaVoucher(body.voucher_code);
+    if (voucherCode && (!coBangVoucher || !coCotVoucherDonHang)) {
+      throw new LoiApiDonHang(503, "Chức năng mã giảm giá chưa được kích hoạt trong cơ sở dữ liệu");
     }
 
     const addressId = req.user
@@ -2216,6 +2723,7 @@ app.post("/api/orders", xacThucTokenTuyChon, async (req, res) => {
       address_id: addressId,
       guest: req.user ? null : shippingDetails,
       payment_method: paymentMethod,
+      ...(voucherCode ? { voucher_code: voucherCode } : {}),
       items: requestedItems
         .slice()
         .sort((left, right) => left.productId - right.productId),
@@ -2229,7 +2737,7 @@ app.post("/api/orders", xacThucTokenTuyChon, async (req, res) => {
       `SELECT id, customer_id, user_address_id, recipient_name, recipient_phone,
               shipping_address, subtotal, shipping_fee, total_amount, status,
               payment_method, payment_status, created_at, updated_at,
-              idempotency_key, request_fingerprint
+              idempotency_key, request_fingerprint${voucherSelectColumns}
        FROM orders WHERE idempotency_key = ? LIMIT 1`,
       [idempotencyKey],
     );
@@ -2334,7 +2842,11 @@ app.post("/api/orders", xacThucTokenTuyChon, async (req, res) => {
       (sum, item) => sum + item.lineTotalCents,
       0n,
     );
-    const totalCents = subtotalCents + shippingFeeCents;
+    const voucherUse = voucherCode
+      ? await kiemTraVoucher(connection, voucherCode, subtotalCents, true)
+      : null;
+    const discountCents = voucherUse?.discountCents || 0n;
+    const totalCents = subtotalCents + shippingFeeCents - discountCents;
     const maxOrderCents = 99999999999999n; // DECIMAL(14,2)
     if (totalCents > maxOrderCents) {
       throw new LoiApiDonHang(400, "Tổng tiền đơn hàng vượt giới hạn cho phép");
@@ -2358,13 +2870,20 @@ app.post("/api/orders", xacThucTokenTuyChon, async (req, res) => {
     const subtotal = doiTuSoTienXu(subtotalCents);
     const shippingFee = doiTuSoTienXu(shippingFeeCents);
     const totalAmount = doiTuSoTienXu(totalCents);
-    const [orderResult] = await connection.execute(
-      `INSERT INTO orders
+    const discountAmount = doiTuSoTienXu(discountCents);
+    const orderInsertSql = coBangVoucher && coCotVoucherDonHang
+      ? `INSERT INTO orders
+        (customer_id, user_address_id, recipient_name, recipient_phone, shipping_address,
+         subtotal, shipping_fee, total_amount, status, payment_method, payment_status,
+         idempotency_key, request_fingerprint, voucher_id, voucher_code,
+         voucher_campaign_name, voucher_discount_type, voucher_discount_value, discount_amount)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending_confirmation', ?, 'unpaid', ?, ?, ?, ?, ?, ?, ?, ?)`
+      : `INSERT INTO orders
         (customer_id, user_address_id, recipient_name, recipient_phone,
          shipping_address, subtotal, shipping_fee, total_amount, status,
          payment_method, payment_status, idempotency_key, request_fingerprint)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending_confirmation', ?, 'unpaid', ?, ?)`,
-      [
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending_confirmation', ?, 'unpaid', ?, ?)`;
+    const orderParams = [
         req.user ? req.user.id : null,
         shippingDetails.id,
         shippingDetails.recipient_name,
@@ -2376,8 +2895,9 @@ app.post("/api/orders", xacThucTokenTuyChon, async (req, res) => {
         paymentMethod,
         idempotencyKey,
         requestFingerprint,
-      ],
-    );
+      ];
+    if (voucherUse) orderParams.push(voucherUse.voucher.id, voucherUse.voucher.code, voucherUse.voucher.campaign_name, voucherUse.voucher.discount_type, voucherUse.voucher.discount_value, discountAmount);
+    const [orderResult] = await connection.execute(orderInsertSql, orderParams);
 
     const orderId = orderResult.insertId;
     for (const item of orderItems) {
@@ -2396,6 +2916,19 @@ app.post("/api/orders", xacThucTokenTuyChon, async (req, res) => {
           item.quantity,
           doiTuSoTienXu(item.lineTotalCents),
         ],
+      );
+    }
+
+    if (voucherUse) {
+      const [usageResult] = await connection.execute(
+        "UPDATE vouchers SET used_count = used_count + 1 WHERE id = ? AND is_active = 1 AND starts_at <= UTC_TIMESTAMP() AND ends_at >= UTC_TIMESTAMP() AND used_count < quantity_limit",
+        [voucherUse.voucher.id],
+      );
+      if (usageResult.affectedRows !== 1) throw new LoiApiDonHang(409, "Mã giảm giá vừa hết lượt sử dụng");
+      await connection.execute(
+        `INSERT INTO voucher_redemptions (voucher_id, order_id, customer_id, voucher_code_snapshot, discount_amount)
+         VALUES (?, ?, ?, ?, ?)`,
+        [voucherUse.voucher.id, orderId, req.user?.id ?? null, voucherUse.voucher.code, discountAmount],
       );
     }
 
@@ -2423,6 +2956,12 @@ app.post("/api/orders", xacThucTokenTuyChon, async (req, res) => {
         shipping_address: shippingDetails.address,
         subtotal: Number(subtotal),
         shipping_fee: Number(shippingFee),
+        voucher_id: voucherUse ? Number(voucherUse.voucher.id) : null,
+        voucher_code: voucherUse?.voucher.code || null,
+        voucher_campaign_name: voucherUse?.voucher.campaign_name || null,
+        voucher_discount_type: voucherUse?.voucher.discount_type || null,
+        voucher_discount_value: voucherUse ? Number(voucherUse.voucher.discount_value) : null,
+        discount_amount: Number(discountAmount),
         total_amount: Number(totalAmount),
         status: "pending_confirmation",
         payment_method: paymentMethod,
@@ -2459,7 +2998,7 @@ app.post("/api/orders", xacThucTokenTuyChon, async (req, res) => {
           `SELECT id, customer_id, user_address_id, recipient_name, recipient_phone,
                   shipping_address, subtotal, shipping_fee, total_amount, status,
                   payment_method, payment_status, created_at, updated_at,
-                  idempotency_key, request_fingerprint
+                  idempotency_key, request_fingerprint${voucherSelectColumns}
            FROM orders WHERE idempotency_key = ? LIMIT 1`,
           [idempotencyKey],
         );
@@ -2532,7 +3071,7 @@ app.get("/api/orders", xacThucToken, async (req, res) => {
       throw new LoiApiDonHang(400, "Số trang quá lớn");
     const [orders] = await pool.execute(
       `SELECT id, user_address_id, recipient_name, recipient_phone, shipping_address,
-              subtotal, shipping_fee, total_amount, status, payment_method,
+              subtotal, shipping_fee, total_amount${cotVoucherDonHangSelect()}, status, payment_method,
               payment_status, created_at, updated_at
        FROM orders
        WHERE customer_id = ?${whereStatus}
@@ -2572,7 +3111,7 @@ app.get("/api/orders/:id", xacThucToken, async (req, res) => {
     const orderId = docSoNguyenDuong(req.params.id, "Mã đơn hàng");
     const [orders] = await pool.execute(
       `SELECT id, user_address_id, recipient_name, recipient_phone, shipping_address,
-              subtotal, shipping_fee, total_amount, status, payment_method,
+              subtotal, shipping_fee, total_amount${cotVoucherDonHangSelect()}, status, payment_method,
               payment_status, created_at, updated_at
        FROM orders
        WHERE id = ? AND customer_id = ?
@@ -2619,7 +3158,7 @@ app.post("/api/orders/lookup", gioiHanTraCuuDonKhach, async (req, res) => {
 
     const [orders] = await pool.execute(
       `SELECT id, customer_id, user_address_id, recipient_name, recipient_phone,
-              shipping_address, subtotal, shipping_fee, total_amount, status,
+              shipping_address, subtotal, shipping_fee, total_amount${cotVoucherDonHangSelect()}, status,
               payment_method, payment_status, created_at, updated_at
        FROM orders
        WHERE id = ? AND customer_id IS NULL AND recipient_phone = ?
@@ -2652,6 +3191,104 @@ app.post("/api/orders/lookup", gioiHanTraCuuDonKhach, async (req, res) => {
       .json({ success: false, message: "Không thể tra cứu đơn hàng" });
   }
 });
+
+app.get(
+  "/api/admin/dashboard",
+  xacThucToken,
+  yeuCauQuyenQuanTri,
+  async (req, res) => {
+    try {
+      const isCalendarDate = (value) => {
+        if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+        const parsed = new Date(`${value}T00:00:00.000Z`);
+        return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+      };
+      const from = req.query.from;
+      const to = req.query.to;
+      if (!isCalendarDate(from) || !isCalendarDate(to) || from > to) {
+        return res.status(400).json({
+          success: false,
+          message: "Khoảng ngày thống kê không hợp lệ",
+        });
+      }
+      const daySpan = (Date.parse(`${to}T00:00:00.000Z`) - Date.parse(`${from}T00:00:00.000Z`)) / 86400000;
+      if (daySpan > 365) {
+        return res.status(400).json({
+          success: false,
+          message: "Khoảng thống kê tối đa là 366 ngày",
+        });
+      }
+
+      const periodValues = [from, to];
+      const [productRows, orderCountRows, customerRows, revenueRows, statusRows, seriesRows, recentRows, topProductRows] = await Promise.all([
+        pool.execute("SELECT COUNT(*) AS total FROM products"),
+        pool.execute("SELECT COUNT(*) AS total FROM orders WHERE created_at >= ? AND created_at < DATE_ADD(?, INTERVAL 1 DAY)", periodValues),
+        pool.execute("SELECT COUNT(*) AS total FROM users WHERE role = 'customer'"),
+        pool.execute("SELECT COALESCE(SUM(total_amount), 0) AS total FROM orders WHERE status = 'completed' AND created_at >= ? AND created_at < DATE_ADD(?, INTERVAL 1 DAY)", periodValues),
+        pool.execute("SELECT status, COUNT(*) AS count FROM orders WHERE created_at >= ? AND created_at < DATE_ADD(?, INTERVAL 1 DAY) GROUP BY status", periodValues),
+        pool.execute(`SELECT DATE_FORMAT(created_at, '%Y-%m-%d') AS date,
+          COUNT(*) AS order_count,
+          COALESCE(SUM(CASE WHEN status = 'completed' THEN total_amount ELSE 0 END), 0) AS revenue
+          FROM orders
+          WHERE created_at >= ? AND created_at < DATE_ADD(?, INTERVAL 1 DAY)
+          GROUP BY DATE_FORMAT(created_at, '%Y-%m-%d')
+          ORDER BY DATE_FORMAT(created_at, '%Y-%m-%d') ASC`, periodValues),
+        pool.execute(`SELECT o.id, o.recipient_name, o.created_at, o.total_amount, o.status,
+          COALESCE(NULLIF(u.full_name, ''), NULLIF(o.recipient_name, ''), 'Khách vãng lai') AS customer_name
+          FROM orders o LEFT JOIN users u ON u.id = o.customer_id
+          WHERE o.created_at >= ? AND o.created_at < DATE_ADD(?, INTERVAL 1 DAY)
+          ORDER BY o.created_at DESC, o.id DESC LIMIT 8`, periodValues),
+        pool.execute(`SELECT oi.product_id, COALESCE(p.name, oi.product_name) AS name,
+          MAX(oi.product_image) AS image,
+          SUM(oi.quantity) AS quantity_sold,
+          SUM(oi.line_total) AS revenue
+          FROM order_items oi
+          INNER JOIN orders o ON o.id = oi.order_id
+          LEFT JOIN products p ON p.id = oi.product_id
+          WHERE o.status = 'completed' AND o.created_at >= ? AND o.created_at < DATE_ADD(?, INTERVAL 1 DAY)
+          GROUP BY oi.product_id, oi.product_name, p.name
+          ORDER BY quantity_sold DESC, revenue DESC LIMIT 5`, periodValues),
+      ]);
+      const number = (value) => Number(value) || 0;
+      return res.json({
+        success: true,
+        period: { from, to },
+        stats: {
+          total_products: number(productRows[0][0].total),
+          total_orders: number(orderCountRows[0][0].total),
+          total_customers: number(customerRows[0][0].total),
+          total_revenue: number(revenueRows[0][0].total),
+        },
+        orders_by_status: statusRows[0].map((row) => ({ status: row.status, count: number(row.count) })),
+        series: seriesRows[0].map((row) => ({
+          date: row.date,
+          order_count: number(row.order_count),
+          revenue: number(row.revenue),
+        })),
+        recent_orders: recentRows[0].map((row) => ({
+          id: Number(row.id),
+          customer_name: row.customer_name,
+          created_at: row.created_at,
+          total_amount: number(row.total_amount),
+          status: row.status,
+        })),
+        top_products: topProductRows[0].map((row) => ({
+          product_id: row.product_id === null ? null : Number(row.product_id),
+          name: row.name,
+          image: row.image || null,
+          quantity_sold: number(row.quantity_sold),
+          revenue: number(row.revenue),
+        })),
+      });
+    } catch (error) {
+      console.error("Lỗi lấy thống kê Dashboard Admin:", error.code || "UNKNOWN");
+      return res.status(500).json({
+        success: false,
+        message: "Không thể tải thống kê quản trị",
+      });
+    }
+  },
+);
 
 app.get(
   "/api/admin/orders",
@@ -2701,7 +3338,7 @@ app.get(
         throw new LoiApiDonHang(400, "Số trang quá lớn");
       const [orders] = await pool.execute(
         `SELECT id, customer_id, user_address_id, recipient_name, recipient_phone,
-              shipping_address, subtotal, shipping_fee, total_amount, status,
+              shipping_address, subtotal, shipping_fee, total_amount${cotVoucherDonHangSelect()}, status,
                 payment_method, payment_status, created_at, updated_at
        FROM orders${where}
        ORDER BY created_at DESC, id DESC
@@ -2762,7 +3399,7 @@ app.patch(
       }
       const [orders] = await pool.execute(
         `SELECT id, customer_id, user_address_id, recipient_name, recipient_phone,
-              shipping_address, subtotal, shipping_fee, total_amount, status,
+              shipping_address, subtotal, shipping_fee, total_amount${cotVoucherDonHangSelect()}, status,
                 payment_method, payment_status, created_at, updated_at
        FROM orders WHERE id = ? LIMIT 1`,
         [orderId],
@@ -2796,11 +3433,165 @@ app.patch(
   },
 );
 
+// Danh sách khách hàng dành riêng cho Admin; không truy vấn cột mật khẩu.
+app.get(
+  "/api/admin/customers",
+  xacThucToken,
+  yeuCauQuyenQuanTri,
+  async (req, res) => {
+    try {
+      const page =
+        req.query.page === undefined
+          ? 1
+          : docSoNguyenDuong(req.query.page, "Số trang");
+      const limit =
+        req.query.limit === undefined
+          ? 20
+          : docSoNguyenDuong(req.query.limit, "Số lượng mỗi trang");
+      if (limit > 50) {
+        throw new LoiApiDonHang(400, "Số khách hàng mỗi trang tối đa là 50");
+      }
+
+      const search = req.query.q === undefined ? "" : req.query.q;
+      if (typeof search !== "string" || search.trim().length > 100) {
+        throw new LoiApiDonHang(400, "Từ khóa tìm kiếm không hợp lệ");
+      }
+
+      const conditions = ["role = ?"];
+      const values = ["customer"];
+      const normalizedSearch = search.trim();
+      if (normalizedSearch) {
+        const likeSearch = `%${normalizedSearch.replace(/[\\%_]/g, "\\$&")}%`;
+        conditions.push("(full_name LIKE ? OR email LIKE ? OR phone LIKE ?)");
+        values.push(likeSearch, likeSearch, likeSearch);
+      }
+
+      const where = ` WHERE ${conditions.join(" AND ")}`;
+      const [countRows] = await pool.execute(
+        `SELECT COUNT(*) AS total FROM users${where}`,
+        values,
+      );
+      const offset = (page - 1) * limit;
+      if (!Number.isSafeInteger(offset)) {
+        throw new LoiApiDonHang(400, "Số trang quá lớn");
+      }
+
+      const [customers] = await pool.execute(
+        `SELECT id, full_name, email, phone, avatar_url, role, created_at
+         FROM users${where}
+         ORDER BY created_at DESC, id DESC
+         LIMIT ? OFFSET ?`,
+        [...values, limit, offset],
+      );
+
+      return res.json({
+        success: true,
+        count: Number(countRows[0].total),
+        page,
+        limit,
+        data: customers.map((customer) => ({
+          id: Number(customer.id),
+          full_name: customer.full_name,
+          email: customer.email,
+          phone: customer.phone,
+          avatar_url: customer.avatar_url || null,
+          role: customer.role,
+          created_at: customer.created_at,
+        })),
+      });
+    } catch (error) {
+      if (error instanceof LoiApiDonHang) {
+        return res
+          .status(error.status)
+          .json({ success: false, message: error.message });
+      }
+      console.error("Lỗi lấy danh sách khách hàng Admin:", error.code || "UNKNOWN");
+      return res
+        .status(500)
+        .json({ success: false, message: "Không thể lấy danh sách khách hàng" });
+    }
+  },
+);
+
+// Chi tiết một khách hàng kèm các địa chỉ giao hàng được lưu trong tài khoản.
+app.get(
+  "/api/admin/customers/:id",
+  xacThucToken,
+  yeuCauQuyenQuanTri,
+  async (req, res) => {
+    try {
+      const customerId = docSoNguyenDuong(req.params.id, "Mã khách hàng");
+      const [customers] = await pool.execute(
+        `SELECT id, full_name, email, phone, avatar_url, role, created_at
+         FROM users
+         WHERE id = ? AND role = ?
+         LIMIT 1`,
+        [customerId, "customer"],
+      );
+      if (!customers.length) {
+        return res
+          .status(404)
+          .json({ success: false, message: "Không tìm thấy khách hàng" });
+      }
+
+      const [addresses] = await pool.execute(
+        `SELECT id, recipient_name, phone, address, is_default, created_at
+         FROM user_addresses
+         WHERE user_id = ?
+         ORDER BY is_default DESC, id DESC`,
+        [customerId],
+      );
+      const customer = customers[0];
+      return res.json({
+        success: true,
+        data: {
+          id: Number(customer.id),
+          full_name: customer.full_name,
+          email: customer.email,
+          phone: customer.phone,
+          avatar_url: customer.avatar_url || null,
+          role: customer.role,
+          created_at: customer.created_at,
+          addresses: addresses.map((address) => ({
+            id: Number(address.id),
+            recipient_name: address.recipient_name,
+            phone: address.phone,
+            address: address.address,
+            is_default: Boolean(address.is_default),
+            created_at: address.created_at,
+          })),
+        },
+      });
+    } catch (error) {
+      if (error instanceof LoiApiDonHang) {
+        return res
+          .status(error.status)
+          .json({ success: false, message: error.message });
+      }
+      console.error("Lỗi lấy chi tiết khách hàng Admin:", error.code || "UNKNOWN");
+      return res
+        .status(500)
+        .json({ success: false, message: "Không thể lấy chi tiết khách hàng" });
+    }
+  },
+);
+
 // Lấy danh sách sản phẩm
 app.get("/api/products", async (req, res) => {
   try {
+    const reviewJoin = coBangDanhGia
+      ? `LEFT JOIN (
+          SELECT r.product_id, ROUND(AVG(r.rating), 1) AS average_rating, COUNT(*) AS review_count
+          FROM product_reviews r${coCotDanhGiaTaiKhoan ? " WHERE r.is_visible = TRUE" : ""}
+          GROUP BY r.product_id
+        ) review_stats ON review_stats.product_id = p.id`
+      : "";
+    const reviewColumns = coBangDanhGia
+      ? "COALESCE(review_stats.average_rating, 0) AS average_rating, COALESCE(review_stats.review_count, 0) AS review_count"
+      : "0 AS average_rating, 0 AS review_count";
     const [rows] = await pool.query(
-      "SELECT * FROM products ORDER BY created_at DESC",
+      `SELECT p.*, ${reviewColumns}
+       FROM products p ${reviewJoin} ORDER BY p.created_at DESC`,
     );
 
     const products = rows.map(chuanHoaSanPham);
@@ -2821,7 +3612,7 @@ app.get("/api/products", async (req, res) => {
 });
 
 // Lấy đánh giá và thống kê đánh giá
-app.get("/api/products/:id/reviews", async (req, res) => {
+app.get("/api/products/:id/reviews", xacThucTokenTuyChon, async (req, res) => {
   try {
     const productId = Number(req.params.id);
 
@@ -2844,6 +3635,12 @@ app.get("/api/products/:id/reviews", async (req, res) => {
       });
     }
 
+    const reviewVisibilityFilter = coCotDanhGiaTaiKhoan
+      ? " AND is_visible = TRUE"
+      : "";
+    const customerReviewFields = coCotDanhGiaTaiKhoan
+      ? ", CASE WHEN customer_id = ? THEN TRUE ELSE FALSE END AS is_mine"
+      : "";
     const [summaryRows] = await pool.execute(
       `SELECT
         COUNT(*) AS totalReviews,
@@ -2860,7 +3657,7 @@ app.get("/api/products/:id/reviews", async (req, res) => {
           END
         ) AS mediaCount
        FROM product_reviews
-       WHERE product_id = ?`,
+       WHERE product_id = ?${reviewVisibilityFilter}`,
       [productId],
     );
 
@@ -2886,15 +3683,15 @@ app.get("/api/products/:id/reviews", async (req, res) => {
         customer_name,
         rating,
         comment,
-        media,
+        media${customerReviewFields},
         created_at
        FROM product_reviews
-       WHERE product_id = ?
+       WHERE product_id = ?${reviewVisibilityFilter}
        ORDER BY created_at DESC, id DESC`,
-      [productId],
+      coCotDanhGiaTaiKhoan ? [req.user?.id || 0, productId] : [productId],
     );
 
-    const reviews = reviewRows.map(chuanHoaDanhGia);
+    const reviews = reviewRows.map(chuanHoaDanhGiaCongKhai);
 
     res.json({
       success: true,
@@ -2913,16 +3710,453 @@ app.get("/api/products/:id/reviews", async (req, res) => {
   }
 });
 
+// Trả đánh giá của riêng tài khoản hiện tại, kể cả khi Admin đã ẩn đánh giá.
+app.get("/api/products/:id/reviews/mine", xacThucToken, async (req, res) => {
+  if (!coCotDanhGiaTaiKhoan) {
+    return res.status(503).json({ success: false, message: "Đánh giá gắn với tài khoản chưa được kích hoạt" });
+  }
+  const productId = Number(req.params.id);
+  if (!Number.isSafeInteger(productId) || productId < 1) {
+    return res.status(400).json({ success: false, message: "ID sản phẩm không hợp lệ" });
+  }
+  try {
+    const [[product]] = await pool.execute("SELECT id FROM products WHERE id = ? LIMIT 1", [productId]);
+    if (!product) return res.status(404).json({ success: false, message: "Không tìm thấy sản phẩm" });
+    const [[review]] = await pool.execute(
+      `SELECT id, product_id, customer_name, rating, comment, media, is_visible, created_at
+       FROM product_reviews
+       WHERE product_id = ? AND customer_id = ?
+       LIMIT 1`,
+      [productId, req.user.id],
+    );
+    return res.json({
+      success: true,
+      data: review ? chuanHoaDanhGiaCuaToi(review) : null,
+    });
+  } catch (error) {
+    console.error("Lỗi lấy đánh giá của khách hàng:", error.code || "UNKNOWN");
+    return res.status(500).json({ success: false, message: "Không thể tải đánh giá của bạn" });
+  }
+});
+
+// Lấy danh sách yêu thích đã lưu theo tài khoản đang đăng nhập.
+app.get("/api/favorites", xacThucToken, async (req, res) => {
+  if (!coBangYeuThich) {
+    return res.status(503).json({ success: false, message: "Danh sách yêu thích chưa được kích hoạt trong cơ sở dữ liệu" });
+  }
+  try {
+    const [rows] = await pool.execute(
+      `SELECT p.*
+       FROM user_favorites f
+       INNER JOIN products p ON p.id = f.product_id
+       WHERE f.user_id = ? AND p.active = TRUE
+       ORDER BY f.created_at DESC, p.id DESC`,
+      [req.user.id],
+    );
+    return res.json({
+      success: true,
+      count: rows.length,
+      data: rows.map(chuanHoaSanPham),
+    });
+  } catch (error) {
+    console.error("Lỗi lấy danh sách yêu thích:", error.code || "UNKNOWN");
+    return res.status(500).json({
+      success: false,
+      message: "Không thể tải danh sách yêu thích",
+    });
+  }
+});
+
+// Thêm sản phẩm đang kinh doanh vào danh sách của tài khoản.
+app.put("/api/favorites/:productId", xacThucToken, async (req, res) => {
+  if (!coBangYeuThich) {
+    return res.status(503).json({ success: false, message: "Danh sách yêu thích chưa được kích hoạt trong cơ sở dữ liệu" });
+  }
+  try {
+    const productId = Number(req.params.productId);
+    if (!Number.isSafeInteger(productId) || productId < 1) {
+      return res.status(400).json({
+        success: false,
+        message: "Mã sản phẩm không hợp lệ",
+      });
+    }
+    const [products] = await pool.execute(
+      "SELECT id FROM products WHERE id = ? AND active = TRUE LIMIT 1",
+      [productId],
+    );
+    if (!products.length) {
+      return res.status(404).json({
+        success: false,
+        message: "Không tìm thấy sản phẩm đang kinh doanh",
+      });
+    }
+    await pool.execute(
+      "INSERT IGNORE INTO user_favorites (user_id, product_id) VALUES (?, ?)",
+      [req.user.id, productId],
+    );
+    return res.json({
+      success: true,
+      message: "Đã thêm sản phẩm vào danh sách yêu thích",
+      data: { product_id: productId, is_favorite: true },
+    });
+  } catch (error) {
+    console.error("Lỗi thêm sản phẩm yêu thích:", error.code || "UNKNOWN");
+    return res.status(500).json({
+      success: false,
+      message: "Không thể cập nhật danh sách yêu thích",
+    });
+  }
+});
+
+// Bỏ một sản phẩm khỏi danh sách yêu thích của chính tài khoản hiện tại.
+app.delete("/api/favorites/:productId", xacThucToken, async (req, res) => {
+  if (!coBangYeuThich) {
+    return res.status(503).json({ success: false, message: "Danh sách yêu thích chưa được kích hoạt trong cơ sở dữ liệu" });
+  }
+  try {
+    const productId = Number(req.params.productId);
+    if (!Number.isSafeInteger(productId) || productId < 1) {
+      return res.status(400).json({
+        success: false,
+        message: "Mã sản phẩm không hợp lệ",
+      });
+    }
+    await pool.execute(
+      "DELETE FROM user_favorites WHERE user_id = ? AND product_id = ?",
+      [req.user.id, productId],
+    );
+    return res.json({
+      success: true,
+      message: "Đã bỏ sản phẩm khỏi danh sách yêu thích",
+      data: { product_id: productId, is_favorite: false },
+    });
+  } catch (error) {
+    console.error("Lỗi bỏ sản phẩm yêu thích:", error.code || "UNKNOWN");
+    return res.status(500).json({
+      success: false,
+      message: "Không thể cập nhật danh sách yêu thích",
+    });
+  }
+});
+
+// Kiểm tra điều kiện gửi đánh giá cho khách đã mua và đơn đã hoàn thành.
+app.get(
+  "/api/products/:id/reviews/eligibility",
+  xacThucToken,
+  async (req, res) => {
+    if (!coCotDanhGiaTaiKhoan) {
+      return res.status(503).json({ success: false, message: "Chức năng đánh giá gắn với tài khoản chưa được kích hoạt trong cơ sở dữ liệu" });
+    }
+    try {
+      const productId = Number(req.params.id);
+      if (!Number.isSafeInteger(productId) || productId < 1) {
+        return res.status(400).json({ success: false, message: "ID sản phẩm không hợp lệ" });
+      }
+      const [[product]] = await pool.execute(
+        "SELECT id FROM products WHERE id = ? LIMIT 1",
+        [productId],
+      );
+      if (!product) return res.status(404).json({ success: false, message: "Không tìm thấy sản phẩm" });
+      const [[purchase]] = await pool.execute(
+        `SELECT EXISTS(
+          SELECT 1 FROM orders o
+          INNER JOIN order_items oi ON oi.order_id = o.id
+          WHERE o.customer_id = ? AND o.status = 'completed' AND oi.product_id = ?
+        ) AS has_completed_purchase`,
+        [req.user.id, productId],
+      );
+      const [[previous]] = await pool.execute(
+        "SELECT id FROM product_reviews WHERE customer_id = ? AND product_id = ? LIMIT 1",
+        [req.user.id, productId],
+      );
+      return res.json({
+        success: true,
+        data: {
+          can_review: Boolean(purchase.has_completed_purchase) && !previous,
+          has_completed_purchase: Boolean(purchase.has_completed_purchase),
+          has_reviewed: Boolean(previous),
+        },
+      });
+    } catch (error) {
+      console.error("Lỗi kiểm tra điều kiện đánh giá:", error.code || "UNKNOWN");
+      return res.status(500).json({ success: false, message: "Không thể kiểm tra điều kiện đánh giá" });
+    }
+  },
+);
+
+// Lưu một đánh giá gắn với tài khoản, chỉ sau khi đơn đã hoàn thành.
+app.post(
+  "/api/products/:id/reviews",
+  xacThucToken,
+  nhanTepDanhGia,
+  async (req, res) => {
+    if (!coCotDanhGiaTaiKhoan) {
+      return res.status(503).json({ success: false, message: "Chức năng đánh giá gắn với tài khoản chưa được kích hoạt trong cơ sở dữ liệu" });
+    }
+    try {
+      const productId = Number(req.params.id);
+      const rating = Number(req.body?.rating);
+      const comment = typeof req.body?.comment === "string" ? req.body.comment.trim() : "";
+      if (!Number.isSafeInteger(productId) || productId < 1) {
+        return res.status(400).json({ success: false, message: "ID sản phẩm không hợp lệ" });
+      }
+      if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+        return res.status(400).json({ success: false, message: "Điểm đánh giá phải từ 1 đến 5 sao" });
+      }
+      if (comment.length > 3000) {
+        return res.status(400).json({ success: false, message: "Nội dung đánh giá không được vượt quá 3000 ký tự" });
+      }
+      const [[product]] = await pool.execute("SELECT id FROM products WHERE id = ? LIMIT 1", [productId]);
+      if (!product) return res.status(404).json({ success: false, message: "Không tìm thấy sản phẩm" });
+      const [[user]] = await pool.execute(
+        "SELECT full_name FROM users WHERE id = ? LIMIT 1",
+        [req.user.id],
+      );
+      if (!user) return res.status(404).json({ success: false, message: "Không tìm thấy tài khoản" });
+      const [[purchase]] = await pool.execute(
+        `SELECT EXISTS(
+          SELECT 1 FROM orders o
+          INNER JOIN order_items oi ON oi.order_id = o.id
+          WHERE o.customer_id = ? AND o.status = 'completed' AND oi.product_id = ?
+        ) AS has_completed_purchase`,
+        [req.user.id, productId],
+      );
+      if (!purchase.has_completed_purchase) {
+        return res.status(403).json({ success: false, message: "Chỉ khách đã mua và có đơn hoàn thành mới được đánh giá sản phẩm này" });
+      }
+      const media = [];
+      try {
+        for (const file of req.files || []) media.push(await luuAnhDanhGia(file));
+      } catch (error) {
+        await xoaAnhDanhGiaChuaLienKet(media);
+        throw error;
+      }
+
+      let result;
+      let connection;
+      let insertAttempted = false;
+      let commitAttempted = false;
+      let discardConnection = false;
+      try {
+        connection = await pool.getConnection();
+        await connection.beginTransaction();
+        insertAttempted = true;
+        [result] = await connection.execute(
+          `INSERT INTO product_reviews
+            (product_id, customer_name, customer_id, rating, comment, media, is_visible)
+           VALUES (?, ?, ?, ?, ?, ?, TRUE)`,
+          [productId, user.full_name, req.user.id, rating, comment || null, JSON.stringify(media)],
+        );
+        commitAttempted = true;
+        await connection.commit();
+      } catch (error) {
+        let definitelyNotSaved = !insertAttempted;
+        if (insertAttempted && !commitAttempted && connection) {
+          try {
+            await connection.rollback();
+            definitelyNotSaved = true;
+          } catch {
+            // Không xóa ảnh khi không xác nhận được rollback.
+            discardConnection = true;
+          }
+        }
+        if (commitAttempted) {
+          discardConnection = true;
+          // Đóng kết nối để MySQL kết thúc transaction trước khi xác minh trạng thái commit.
+          try {
+            connection?.destroy();
+            connection = null;
+          } catch {
+            // Nếu không đóng được kết nối, giữ ảnh vì trạng thái lưu còn chưa rõ.
+          }
+          // COMMIT có thể đã đến MySQL dù client nhận lỗi; chỉ dọn ảnh khi truy vấn xác nhận không có dòng.
+          if (!connection && result?.insertId) {
+            try {
+              const [[persistedReview]] = await pool.execute(
+                "SELECT id FROM product_reviews WHERE id = ? LIMIT 1",
+                [result.insertId],
+              );
+              if (!persistedReview) await xoaAnhDanhGiaChuaLienKet(media);
+            } catch {
+              // Kết quả commit vẫn chưa xác định; giữ ảnh để tránh làm hỏng bản ghi đã lưu.
+            }
+          }
+        }
+        if (definitelyNotSaved) await xoaAnhDanhGiaChuaLienKet(media);
+        throw error;
+      } finally {
+        if (discardConnection) connection?.destroy();
+        else connection?.release();
+      }
+
+      // COMMIT đã thành công; lỗi đọc lại không được xóa ảnh mà dòng đánh giá đang tham chiếu.
+      const [[review]] = await pool.execute(
+        `SELECT id, product_id, customer_name, customer_id, rating, comment, media, is_visible, created_at
+         FROM product_reviews WHERE id = ? LIMIT 1`,
+        [result.insertId],
+      );
+      return res.status(201).json({
+        success: true,
+        message: "Đánh giá của bạn đã được đăng",
+        data: chuanHoaDanhGiaCongKhai({ ...review, is_mine: true }),
+      });
+    } catch (error) {
+      if (error.code === "ER_DUP_ENTRY") {
+        return res.status(409).json({ success: false, message: "Bạn đã đánh giá sản phẩm này trước đó" });
+      }
+      console.error("Lỗi lưu đánh giá:", error.code || "UNKNOWN");
+      return res.status(500).json({ success: false, message: "Không thể lưu đánh giá" });
+    }
+  },
+);
+
+// Khách chỉ được sửa đánh giá thuộc chính tài khoản; customer_id không nhận từ client.
+app.put(
+  "/api/products/:id/reviews/:reviewId",
+  xacThucToken,
+  nhanTepDanhGia,
+  async (req, res) => {
+    if (!coCotDanhGiaTaiKhoan) return res.status(503).json({ success: false, message: "Chức năng đánh giá theo tài khoản chưa được kích hoạt" });
+    const productId = Number(req.params.id);
+    const reviewId = Number(req.params.reviewId);
+    const rating = Number(req.body?.rating);
+    const comment = typeof req.body?.comment === "string" ? req.body.comment.trim() : "";
+    if (![productId, reviewId].every((value) => Number.isSafeInteger(value) && value > 0)) return res.status(400).json({ success: false, message: "Mã đánh giá không hợp lệ" });
+    if (!Number.isInteger(rating) || rating < 1 || rating > 5 || comment.length > 3000) return res.status(400).json({ success: false, message: "Điểm đánh giá phải từ 1 đến 5 sao và nội dung tối đa 3000 ký tự" });
+    let uploaded = [];
+    try {
+      const [[review]] = await pool.execute("SELECT id, media FROM product_reviews WHERE id = ? AND product_id = ? AND customer_id = ? LIMIT 1", [reviewId, productId, req.user.id]);
+      if (!review) return res.status(404).json({ success: false, message: "Không tìm thấy đánh giá của bạn" });
+      let media = review.media;
+      if (typeof media === "string") { try { media = JSON.parse(media); } catch { media = []; } }
+      if (!Array.isArray(media)) media = [];
+      if (media.length + (req.files?.length || 0) > 5) return res.status(400).json({ success: false, message: "Mỗi đánh giá tối đa 5 ảnh" });
+      for (const file of req.files || []) uploaded.push(await luuAnhDanhGia(file));
+      media = [...media, ...uploaded];
+      await pool.execute("UPDATE product_reviews SET rating = ?, comment = ?, media = ? WHERE id = ? AND product_id = ? AND customer_id = ?", [rating, comment || null, JSON.stringify(media), reviewId, productId, req.user.id]);
+      const [[updated]] = await pool.execute("SELECT id, product_id, customer_name, rating, comment, media, created_at, TRUE AS is_mine FROM product_reviews WHERE id = ? LIMIT 1", [reviewId]);
+      return res.json({ success: true, message: "Đã cập nhật đánh giá", data: chuanHoaDanhGiaCongKhai(updated) });
+    } catch (error) {
+      await xoaAnhDanhGiaChuaLienKet(uploaded);
+      console.error("Lỗi cập nhật đánh giá:", error.code || "UNKNOWN");
+      return res.status(500).json({ success: false, message: "Không thể cập nhật đánh giá" });
+    }
+  },
+);
+
+// Khách chỉ được xóa đánh giá thuộc chính tài khoản.
+app.delete("/api/products/:id/reviews/:reviewId", xacThucToken, async (req, res) => {
+  if (!coCotDanhGiaTaiKhoan) return res.status(503).json({ success: false, message: "Chức năng đánh giá theo tài khoản chưa được kích hoạt" });
+  const productId = Number(req.params.id);
+  const reviewId = Number(req.params.reviewId);
+  if (![productId, reviewId].every((value) => Number.isSafeInteger(value) && value > 0)) return res.status(400).json({ success: false, message: "Mã đánh giá không hợp lệ" });
+  try {
+    const [[review]] = await pool.execute("SELECT media FROM product_reviews WHERE id = ? AND product_id = ? AND customer_id = ? LIMIT 1", [reviewId, productId, req.user.id]);
+    if (!review) return res.status(404).json({ success: false, message: "Không tìm thấy đánh giá của bạn" });
+    let media = review.media;
+    if (typeof media === "string") { try { media = JSON.parse(media); } catch { media = []; } }
+    const [result] = await pool.execute("DELETE FROM product_reviews WHERE id = ? AND product_id = ? AND customer_id = ?", [reviewId, productId, req.user.id]);
+    if (!result.affectedRows) return res.status(404).json({ success: false, message: "Không tìm thấy đánh giá của bạn" });
+    await xoaAnhDanhGiaChuaLienKet(Array.isArray(media) ? media : []);
+    return res.json({ success: true, message: "Đã xóa đánh giá" });
+  } catch (error) {
+    console.error("Lỗi xóa đánh giá khách hàng:", error.code || "UNKNOWN");
+    return res.status(500).json({ success: false, message: "Không thể xóa đánh giá" });
+  }
+});
+
+// Danh sách đánh giá chờ kiểm duyệt, chỉ Admin được xem.
+app.get(
+  "/api/admin/reviews",
+  xacThucToken,
+  yeuCauQuyenQuanTri,
+  async (req, res) => {
+    if (!coCotDanhGiaTaiKhoan) {
+      return res.status(503).json({ success: false, message: "Chức năng kiểm duyệt đánh giá chưa được kích hoạt trong cơ sở dữ liệu" });
+    }
+    try {
+      const [rows] = await pool.execute(
+        `SELECT r.*, p.name AS product_name
+         FROM product_reviews r
+         INNER JOIN products p ON p.id = r.product_id
+         ORDER BY r.is_visible ASC, r.created_at DESC, r.id DESC
+         LIMIT 200`,
+      );
+      return res.json({ success: true, count: rows.length, data: rows.map(chuanHoaDanhGia) });
+    } catch (error) {
+      console.error("Lỗi lấy đánh giá quản trị:", error.code || "UNKNOWN");
+      return res.status(500).json({ success: false, message: "Không thể tải danh sách đánh giá" });
+    }
+  },
+);
+
+// Ẩn đánh giá khỏi trang sản phẩm; thao tác chỉ dành cho Admin.
+app.patch(
+  "/api/admin/reviews/:id/visibility",
+  xacThucToken,
+  yeuCauQuyenQuanTri,
+  async (req, res) => {
+    if (!coCotDanhGiaTaiKhoan) {
+      return res.status(503).json({ success: false, message: "Chức năng kiểm duyệt đánh giá chưa được kích hoạt trong cơ sở dữ liệu" });
+    }
+    const id = Number(req.params.id);
+    if (!Number.isSafeInteger(id) || id < 1 || typeof req.body?.is_visible !== "boolean") {
+      return res.status(400).json({ success: false, message: "Thông tin kiểm duyệt không hợp lệ" });
+    }
+    try {
+      const [result] = await pool.execute(
+        "UPDATE product_reviews SET is_visible = ? WHERE id = ?",
+        [req.body.is_visible, id],
+      );
+      if (!result.affectedRows) return res.status(404).json({ success: false, message: "Không tìm thấy đánh giá" });
+      return res.json({ success: true, message: req.body.is_visible ? "Đánh giá đã được hiển thị" : "Đánh giá đã được ẩn" });
+    } catch (error) {
+      console.error("Lỗi cập nhật hiển thị đánh giá:", error.code || "UNKNOWN");
+      return res.status(500).json({ success: false, message: "Không thể cập nhật đánh giá" });
+    }
+  },
+);
+
+// Xóa đánh giá theo yêu cầu kiểm duyệt của Admin.
+app.delete(
+  "/api/admin/reviews/:id",
+  xacThucToken,
+  yeuCauQuyenQuanTri,
+  async (req, res) => {
+    if (!coCotDanhGiaTaiKhoan) {
+      return res.status(503).json({ success: false, message: "Chức năng kiểm duyệt đánh giá chưa được kích hoạt trong cơ sở dữ liệu" });
+    }
+    const id = Number(req.params.id);
+    if (!Number.isSafeInteger(id) || id < 1) return res.status(400).json({ success: false, message: "ID đánh giá không hợp lệ" });
+    try {
+      const [[review]] = await pool.execute("SELECT media FROM product_reviews WHERE id = ? LIMIT 1", [id]);
+      if (!review) return res.status(404).json({ success: false, message: "Không tìm thấy đánh giá" });
+      let media = review.media;
+      if (typeof media === "string") { try { media = JSON.parse(media); } catch { media = []; } }
+      const [result] = await pool.execute("DELETE FROM product_reviews WHERE id = ?", [id]);
+      if (!result.affectedRows) return res.status(404).json({ success: false, message: "Không tìm thấy đánh giá" });
+      await xoaAnhDanhGiaChuaLienKet(Array.isArray(media) ? media : []);
+      return res.json({ success: true, message: "Đã xóa đánh giá" });
+    } catch (error) {
+      console.error("Lỗi xóa đánh giá:", error.code || "UNKNOWN");
+      return res.status(500).json({ success: false, message: "Không thể xóa đánh giá" });
+    }
+  },
+);
+
 // Thêm sản phẩm
 app.post(
   "/api/products",
   xacThucToken,
   yeuCauQuyenQuanTri,
+  xuLyUploadAnhSanPham,
   async (req, res) => {
+    let productCreated = false;
     try {
       const errors = kiemTraDuLieuSanPham(req.body);
 
       if (errors.length) {
+        await xoaTepAnhSanPham(req.file);
         return res.status(400).json({
           success: false,
           message: errors.join("; "),
@@ -2930,6 +4164,7 @@ app.post(
       }
 
       const product = layGiaTriSanPham(req.body);
+      if (req.file) product.image = `/uploads/products/${req.file.filename}`;
 
       const [result] = await pool.execute(
         `INSERT INTO products
@@ -2946,6 +4181,7 @@ app.post(
           product.active,
         ],
       );
+      productCreated = result.affectedRows > 0;
 
       const [rows] = await pool.execute("SELECT * FROM products WHERE id = ?", [
         result.insertId,
@@ -2957,6 +4193,7 @@ app.post(
         data: chuanHoaSanPham(rows[0]),
       });
     } catch (error) {
+      if (req.file && !productCreated) await xoaTepAnhSanPham(req.file);
       console.error("Lỗi thêm sản phẩm:", error.message);
 
       res.status(500).json({
@@ -2972,11 +4209,14 @@ app.put(
   "/api/products/:id",
   xacThucToken,
   yeuCauQuyenQuanTri,
+  xuLyUploadAnhSanPham,
   async (req, res) => {
+    let productImageLinked = false;
     try {
       const id = Number(req.params.id);
 
       if (!Number.isSafeInteger(id) || id < 1) {
+        await xoaTepAnhSanPham(req.file);
         return res.status(400).json({
           success: false,
           message: "ID sản phẩm không hợp lệ",
@@ -2986,6 +4226,7 @@ app.put(
       const errors = kiemTraDuLieuSanPham(req.body, true);
 
       if (errors.length) {
+        await xoaTepAnhSanPham(req.file);
         return res.status(400).json({
           success: false,
           message: errors.join("; "),
@@ -2996,15 +4237,35 @@ app.put(
         (field) => req.body[field] !== undefined,
       );
 
+      if (req.file && !updates.includes("image")) {
+        updates.push("image");
+      }
+
       if (!updates.length) {
+        await xoaTepAnhSanPham(req.file);
         return res.status(400).json({
           success: false,
           message: "Không có thông tin cần cập nhật",
         });
       }
 
+      const [existingProductRows] = await pool.execute(
+        "SELECT image FROM products WHERE id = ? LIMIT 1",
+        [id],
+      );
+      if (!existingProductRows.length) {
+        await xoaTepAnhSanPham(req.file);
+        return res.status(404).json({
+          success: false,
+          message: "Không tìm thấy sản phẩm",
+        });
+      }
+      const oldProductImage = existingProductRows[0].image;
+
       const values = updates.map((field) => {
-        const value = req.body[field];
+        const value = field === "image" && req.file
+          ? `/uploads/products/${req.file.filename}`
+          : req.body[field];
 
         if (field === "name" || field === "category") {
           return value.trim();
@@ -3027,6 +4288,7 @@ app.put(
         `UPDATE products SET ${setClause} WHERE id = ?`,
         [...values, id],
       );
+      productImageLinked = Boolean(req.file && result.affectedRows > 0);
 
       if (result.affectedRows === 0) {
         const [existing] = await pool.execute(
@@ -3035,6 +4297,7 @@ app.put(
         );
 
         if (!existing.length) {
+          await xoaTepAnhSanPham(req.file);
           return res.status(404).json({
             success: false,
             message: "Không tìm thấy sản phẩm",
@@ -3046,12 +4309,18 @@ app.put(
         id,
       ]);
 
+      const currentProduct = chuanHoaSanPham(rows[0]);
+      if (oldProductImage !== currentProduct.image) {
+        await xoaAnhSanPhamNeuKhongDuocThamChieu(oldProductImage);
+      }
+
       res.json({
         success: true,
         message: "Cập nhật sản phẩm thành công",
-        data: chuanHoaSanPham(rows[0]),
+        data: currentProduct,
       });
     } catch (error) {
+      if (req.file && !productImageLinked) await xoaTepAnhSanPham(req.file);
       console.error("Lỗi cập nhật sản phẩm:", error.message);
 
       res.status(500).json({
@@ -3078,6 +4347,17 @@ app.delete(
         });
       }
 
+      const [existingProducts] = await pool.execute(
+        "SELECT image FROM products WHERE id = ? LIMIT 1",
+        [id],
+      );
+      if (!existingProducts.length) {
+        return res.status(404).json({
+          success: false,
+          message: "Không tìm thấy sản phẩm",
+        });
+      }
+
       const [result] = await pool.execute("DELETE FROM products WHERE id = ?", [
         id,
       ]);
@@ -3089,11 +4369,19 @@ app.delete(
         });
       }
 
+      await xoaAnhSanPhamNeuKhongDuocThamChieu(existingProducts[0].image);
+
       res.json({
         success: true,
         message: "Xóa sản phẩm thành công",
       });
     } catch (error) {
+      if (error.code === "ER_ROW_IS_REFERENCED_2" || error.code === "ER_ROW_IS_REFERENCED") {
+        return res.status(409).json({
+          success: false,
+          message: "Không thể xóa sản phẩm vì sản phẩm đang được giỏ hàng, đơn hàng hoặc dữ liệu khác sử dụng.",
+        });
+      }
       console.error("Lỗi xóa sản phẩm:", error.message);
 
       res.status(500).json({
@@ -3127,6 +4415,27 @@ async function khoiDongMayChu() {
       const tableNames = tableRows.map((row) => Object.values(row)[0]);
       coSoDuLieuDungTenViet =
         tableNames.includes("san_pham") && !tableNames.includes("products");
+      coBangYeuThich = tableNames.includes("user_favorites");
+      coBangDanhGia = tableNames.includes("product_reviews") || tableNames.includes("danh_gia_san_pham");
+      coBangVoucher = tableNames.includes("vouchers") && tableNames.includes("voucher_redemptions");
+      const orderTableName = tableNames.includes("orders") ? "orders" : tableNames.includes("don_hang") ? "don_hang" : "";
+      if (orderTableName) {
+        const [orderColumns] = await boKetNoiGoc.query(`SHOW COLUMNS FROM \`${orderTableName}\``);
+        const orderColumnNames = new Set(orderColumns.map((row) => row.Field));
+        const voucherOrderColumns = coSoDuLieuDungTenViet
+          ? ["ma_chuong_trinh_giam_gia", "ma_voucher_luc_dat", "ten_chuong_trinh_luc_dat", "loai_giam_luc_dat", "gia_tri_giam_luc_dat", "so_tien_giam"]
+          : ["voucher_id", "voucher_code", "voucher_campaign_name", "voucher_discount_type", "voucher_discount_value", "discount_amount"];
+        coCotVoucherDonHang = voucherOrderColumns.every((column) => orderColumnNames.has(column));
+      }
+      if (tableNames.includes("product_reviews")) {
+        const [reviewColumns] = await boKetNoiGoc.query(
+          "SHOW COLUMNS FROM product_reviews",
+        );
+        const reviewColumnNames = reviewColumns.map((row) => row.Field);
+        coCotDanhGiaTaiKhoan =
+          reviewColumnNames.includes("customer_id") &&
+          reviewColumnNames.includes("is_visible");
+      }
       console.log("Đã kết nối MySQL thành công!");
       console.log(
         `Schema database: ${coSoDuLieuDungTenViet ? "định danh tiếng Việt" : "định danh hiện có"}`,

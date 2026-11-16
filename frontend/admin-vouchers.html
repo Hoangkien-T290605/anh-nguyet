@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#7041a6" />
+    <link rel="stylesheet" href="./site.css" />
+    <link rel="stylesheet" href="./admin.css" />
+    <title>Quản lý mã giảm giá | Ánh Nguyệt</title>
+  </head>
+  <body data-admin-page="vouchers">
+    <div id="admin-gate" class="admin-gate" role="status">Đang xác minh quyền quản trị...</div>
+    <div id="admin-app" class="admin-app" hidden>
+      <aside id="admin-sidebar" class="admin-sidebar"></aside>
+      <div class="admin-main-column">
+        <header id="admin-topbar" class="admin-topbar"></header>
+        <main id="admin-content" class="admin-content admin-vouchers-page">
+          <section class="admin-page-heading">
+            <span>CHƯƠNG TRÌNH KHUYẾN MÃI</span>
+            <h1>Quản lý mã giảm giá</h1>
+            <p>Quản lý thời hạn, điều kiện và lượt sử dụng voucher.</p>
+          </section>
+          <section class="admin-vouchers-panel" aria-label="Danh sách mã giảm giá">
+            <div class="admin-vouchers-toolbar">
+              <label>Tìm mã hoặc chương trình<input type="search" data-voucher-search maxlength="100" autocomplete="off" placeholder="Ví dụ: ANHNGUYET10" /></label>
+              <label>Trạng thái<select data-voucher-status><option value="all">Tất cả</option><option value="active">Đang hoạt động</option><option value="scheduled">Sắp diễn ra</option><option value="expired">Đã hết hạn</option><option value="exhausted">Hết lượt</option><option value="inactive">Đã tạm ngừng</option></select></label>
+              <label>Loại giảm<select data-voucher-type><option value="all">Tất cả</option><option value="percentage">Phần trăm</option><option value="fixed">Số tiền cố định</option></select></label>
+              <button class="admin-primary-button" type="button" data-voucher-add>+ Tạo mã giảm giá</button>
+            </div>
+            <p class="admin-vouchers-message" data-voucher-message role="status" aria-live="polite">Đang tải mã giảm giá...</p>
+            <div class="admin-vouchers-table-wrap" data-voucher-table-wrap hidden>
+              <table class="admin-vouchers-table">
+                <thead><tr><th>Mã / chương trình</th><th>Ưu đãi</th><th>Điều kiện</th><th>Thời hạn</th><th>Lượt dùng</th><th>Trạng thái</th><th>Thao tác</th></tr></thead>
+                <tbody data-voucher-rows></tbody>
+              </table>
+            </div>
+            <nav class="admin-vouchers-pagination" data-voucher-pagination aria-label="Phân trang mã giảm giá" hidden></nav>
+          </section>
+        </main>
+      </div>
+    </div>
+    <dialog class="admin-voucher-dialog" data-voucher-dialog aria-labelledby="voucher-dialog-title">
+      <form class="admin-voucher-form" data-voucher-form>
+        <header class="admin-product-dialog-heading">
+          <div><span class="admin-eyebrow">THÔNG TIN KHUYẾN MÃI</span><h2 id="voucher-dialog-title" data-voucher-dialog-title>Tạo mã giảm giá</h2></div>
+          <button class="admin-product-close" type="button" data-voucher-close aria-label="Đóng biểu mẫu">×</button>
+        </header>
+        <p class="admin-voucher-form-message" data-voucher-form-message role="alert" hidden></p>
+        <input type="hidden" name="id" />
+        <div class="admin-voucher-form-grid">
+          <label>Mã voucher<input name="code" maxlength="40" pattern="[A-Za-z0-9_-]{3,40}" required autocomplete="off" /></label>
+          <label class="admin-voucher-field-wide">Tên chương trình<input name="campaign_name" maxlength="150" required /></label>
+          <label>Loại giảm<select name="discount_type" required><option value="percentage">Phần trăm</option><option value="fixed">Số tiền cố định</option></select></label>
+          <label>Giá trị giảm<input name="discount_value" type="number" min="0.01" step="0.01" required /></label>
+          <label>Đơn hàng tối thiểu (đ)<input name="minimum_subtotal" type="number" min="0" step="0.01" value="0" required /></label>
+          <label data-voucher-cap-field>Mức giảm tối đa (đ)<input name="maximum_discount" type="number" min="0.01" step="0.01" /></label>
+          <label>Số lượng phát hành<input name="quantity_limit" type="number" min="1" step="1" required /></label>
+          <label>Thời gian bắt đầu<input name="starts_at" type="datetime-local" required /></label>
+          <label>Thời gian kết thúc<input name="ends_at" type="datetime-local" required /></label>
+          <label class="admin-voucher-check"><input name="is_active" type="checkbox" checked /> Kích hoạt mã</label>
+        </div>
+        <footer class="admin-voucher-form-actions"><button class="admin-product-cancel" type="button" data-voucher-close>Hủy</button><button class="admin-primary-button" type="submit" data-voucher-save>Lưu mã giảm giá</button></footer>
+      </form>
+    </dialog>
+    <script src="./config.js"></script>
+    <script type="module" src="./src/js/admin/main.js"></script>
+  </body>
+</html>

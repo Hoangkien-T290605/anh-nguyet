@@ -25,13 +25,13 @@ if (currentPage === "home") {
 } else if (currentPage === "order-lookup") {
   const { mountOrderLookup } = await import("./pages/order-lookup.js");
   mountOrderLookup();
-} else if (currentPage === "admin-orders") {
-  const { mountAdminOrders } = await import("./pages/admin-orders.js");
-  mountAdminOrders();
 } else if (currentPage === "login" || currentPage === "register") {
   const { mountAuth } = await import("./pages/auth.js");
   mountAuth(currentPage);
 } else if (currentPage === "account") {
   const { mountAccount } = await import("./pages/account.js");
   mountAccount();
+} else if (currentPage === "contact") {
+  const { mountContact } = await import("./pages/contact.js");
+  mountContact();
 }

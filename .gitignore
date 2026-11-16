@@ -23,7 +23,10 @@ Thumbs.db
 
 # User uploaded files
 server/uploads/
+frontend/images/products/*
+!frontend/images/products/.gitkeep
 
 # Database backups (contain private user data)
 database/anh_nguyet_full_backup.sql
+/database/backups/*.sql
 /backups/

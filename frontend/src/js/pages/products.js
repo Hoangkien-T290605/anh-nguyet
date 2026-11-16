@@ -1,6 +1,8 @@
 // Trang danh sách tải sản phẩm thật và hỗ trợ tìm kiếm, lọc, sắp xếp.
 import { apiRequest } from "../services/api.js";
+import { createProductSearchMatcher } from "../services/product-search.js";
 import { addToCart } from "../services/cart.js";
+import { loadFavoriteProducts, readFavoriteSession, requireFavoriteLogin, saveFavoriteState } from "../services/favorites.js";
 import {
   bindImageFallback,
   escapeHTML,
@@ -24,10 +26,6 @@ function foldSearchText(value = "") {
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/đ/g, "d");
-}
-
-function hasVietnameseDiacritics(value = "") {
-  return /[\u0300-\u036f]/.test(normalizeSearchText(value).normalize("NFD"));
 }
 
 // Xác định nhóm con dựa trên danh mục và tên sản phẩm.
@@ -81,24 +79,16 @@ function matchesPriceRange(price, range) {
 }
 
 // Áp dụng đồng thời từ khóa, danh mục, giá và cách sắp xếp hiện hành.
-function filterProducts(products, state) {
-  const queryWords = normalizeSearchText(state.query).split(" ").filter(Boolean);
+export function filterProducts(products, state) {
+  const matchesName = createProductSearchMatcher(products, state.query);
   const visible = products.filter((item) => {
-    const haystack = normalizeSearchText(
-      [item.name, item.category, item.description].filter(Boolean).join(" "),
-    );
-    const foldedHaystack = foldSearchText(haystack);
     return (
       (state.category === "Tất cả" ||
         String(item.category || "") === state.category) &&
       (state.subcategory === "Tất cả" ||
         getSubcategory(item) === state.subcategory) &&
       (!state.price || matchesPriceRange(item.price, state.price)) &&
-      queryWords.every((word) =>
-        hasVietnameseDiacritics(word)
-          ? haystack.includes(word)
-          : foldedHaystack.includes(foldSearchText(word)),
-      )
+      matchesName(item)
     );
   });
   if (state.sort === "gia-asc")
@@ -120,6 +110,7 @@ export async function mountProducts() {
   const categoriesNode = document.getElementById("product-category");
   const search = document.getElementById("products-page-search-check");
   const clearSearch = document.getElementById("clear-products-page-search");
+  const clearPrice = document.getElementById("delete-price");
   const headerSearch = document.querySelector("[data-search]");
   const sort = document.getElementById("products-page-sort");
   const url = new URL(window.location.href);
@@ -132,6 +123,19 @@ export async function mountProducts() {
     sort: "default",
   };
   const favorites = new Set();
+  const favoriteSession = readFavoriteSession();
+  if (favoriteSession) {
+    try {
+      (await loadFavoriteProducts(favoriteSession)).forEach((item) =>
+        favorites.add(String(item.id ?? item._id)),
+      );
+    } catch (error) {
+      if (error.status === 401) {
+        localStorage.removeItem("anh-nguyet-auth");
+        window.dispatchEvent(new CustomEvent("anh-nguyet-xac-thuc-cap-nhat", { detail: { user: null } }));
+      }
+    }
+  }
   document.querySelector(".products-page-heading-decoration img").src = decorationUrl;
   search.value = state.query;
   headerSearch.value = state.query;
@@ -172,7 +176,6 @@ export async function mountProducts() {
     document.querySelectorAll("[data-price-item]").forEach((input) => {
       input.checked = input.dataset.priceItem === state.price;
     });
-    const clearPrice = document.getElementById("delete-price");
     if (clearPrice) clearPrice.hidden = !state.price;
     if (clearSearch) clearSearch.hidden = !state.query;
   }
@@ -237,6 +240,10 @@ export async function mountProducts() {
       hienThiDanhSachSanPham();
     }),
   );
+  clearPrice?.addEventListener("click", () => {
+    state.price = "";
+    hienThiDanhSachSanPham();
+  });
   headerSearch.addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
       event.preventDefault();
@@ -274,7 +281,7 @@ export async function mountProducts() {
   document
     .getElementById("reset-empty-filter")
     .addEventListener("click", datLaiBoLoc);
-  grid.addEventListener("click", (event) => {
+  grid.addEventListener("click", async (event) => {
     const button = event.target.closest("[data-add-cart]");
     if (button) {
       event.stopPropagation();
@@ -301,8 +308,22 @@ export async function mountProducts() {
     if (favorite) {
       event.stopPropagation();
       const id = favorite.dataset.favorite;
-      favorites.has(id) ? favorites.delete(id) : favorites.add(id);
-      hienThiDanhSachSanPham();
+      if (!favoriteSession) return requireFavoriteLogin();
+      const willFavorite = !favorites.has(id);
+      try {
+        await saveFavoriteState(id, willFavorite, favoriteSession);
+        willFavorite ? favorites.add(id) : favorites.delete(id);
+        hienThiDanhSachSanPham();
+      } catch (error) {
+        if (error.status === 401) {
+          localStorage.removeItem("anh-nguyet-auth");
+          window.dispatchEvent(new CustomEvent("anh-nguyet-xac-thuc-cap-nhat", { detail: { user: null } }));
+          return requireFavoriteLogin();
+        }
+        const thongBao = document.getElementById("page-toast-notification");
+        thongBao.textContent = error.message || "Không thể cập nhật danh sách yêu thích.";
+        thongBao.hidden = false;
+      }
       return;
     }
     const card = event.target.closest("[data-product]");

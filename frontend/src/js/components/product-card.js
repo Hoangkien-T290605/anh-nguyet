@@ -21,6 +21,9 @@ export function formatPrice(value) {
 export function createProductCard(product, index = 0, favoriteIds = new Set()) {
   const id = String(product._id ?? product.id ?? "");
   const image = getProductImageUrl(product.image);
+  const productDetail = [product.category, product.description]
+    .filter(Boolean)
+    .join(" · ");
   const categorySymbol =
     product.category === "Đồ uống"
       ? "♧"
@@ -32,7 +35,12 @@ export function createProductCard(product, index = 0, favoriteIds = new Set()) {
     favoriteIds instanceof Set
       ? favoriteIds.has(id)
       : Array.isArray(favoriteIds) && favoriteIds.includes(id);
-  return `<article class="product-card" role="link" tabindex="0" data-product="${escapeHTML(id)}" aria-label="Xem chi tiết ${escapeHTML(product.name)}"><div class="product-image-wrapper product-image-wrapper-${index % 5}">${image ? `<img class="product-image" src="${escapeHTML(image)}" alt="${escapeHTML(product.name)}" loading="lazy" data-product-image>` : ""}<span class="product-placeholder" aria-hidden="true" ${image ? "hidden" : ""}>${categorySymbol}</span><span class="product-brand">ÁNH NGUYỆT</span><button class="favorite-button ${favorite ? "is-favorite" : ""}" type="button" data-favorite="${escapeHTML(id)}" aria-label="${favorite ? "Bỏ yêu thích" : "Thêm vào yêu thích"}">${favorite ? "♥" : "♡"}</button></div><div class="product-info"><h3>${escapeHTML(product.name || "Sản phẩm")}</h3><p class="product-detail">${escapeHTML(product.description || product.category || "")}</p><strong class="product-price">${formatPrice(product.price)}</strong><div class="product-rating"><span>${escapeHTML(product.category || "")}</span></div><button class="add-button" type="button" data-add-cart="${escapeHTML(id)}" ${available ? "" : "disabled"}><span aria-hidden="true">🛒</span>${available ? "Thêm vào giỏ hàng" : "Tạm hết hàng"}</button></div></article>`;
+  const reviewCount = Number(product.review_count) || 0;
+  const average = Number(product.average_rating) || 0;
+  const ratingMarkup = reviewCount
+    ? `<span class="product-rating-score" aria-label="${average.toFixed(1)} trên 5 sao">★ ${average.toFixed(1)}</span><small>${reviewCount} đánh giá</small>`
+    : `<span class="product-rating-empty">Chưa có đánh giá</span>`;
+  return `<article class="product-card" role="link" tabindex="0" data-product="${escapeHTML(id)}" aria-label="Xem chi tiết ${escapeHTML(product.name)}"><div class="product-image-wrapper product-image-wrapper-${index % 5}">${image ? `<img class="product-image" src="${escapeHTML(image)}" alt="${escapeHTML(product.name)}" loading="lazy" data-product-image>` : ""}<span class="product-placeholder" aria-hidden="true" ${image ? "hidden" : ""}>${categorySymbol}</span><span class="product-brand">ÁNH NGUYỆT</span><button class="favorite-button ${favorite ? "is-favorite" : ""}" type="button" data-favorite="${escapeHTML(id)}" aria-label="${favorite ? "Bỏ yêu thích" : "Thêm vào yêu thích"}">${favorite ? "♥" : "♡"}</button></div><div class="product-info"><h3>${escapeHTML(product.name || "Sản phẩm")}</h3><p class="product-detail">${escapeHTML(productDetail)}</p><strong class="product-price">${formatPrice(product.price)}</strong><div class="product-rating">${ratingMarkup}</div><button class="add-button" type="button" data-add-cart="${escapeHTML(id)}" ${available ? "" : "disabled"}><span aria-hidden="true">🛒</span>${available ? "Thêm vào giỏ hàng" : "Tạm hết hàng"}</button></div></article>`;
 }
 
 // Ẩn ảnh lỗi và hiện biểu tượng dự phòng tương ứng.

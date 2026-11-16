@@ -1,0 +1,93 @@
+diff --git a/client/src/AccountPage.jsx b/client/src/AccountPage.jsx
+index 5efa3fe..7a204fe 100644
+--- a/client/src/AccountPage.jsx
++++ b/client/src/AccountPage.jsx
+@@ -13,8 +13,8 @@ import accountIcon from "./assets/icon-tai-khoan.png";
+ import PasswordChangeForm from "./PasswordChangeForm";
+ import "./AccountPage.css";
+ 
+-const API_URL = "http://localhost:5000/api/auth";
+-const SERVER_URL = "http://localhost:5000";
++const API_URL = `${(import.meta.env.VITE_API_URL || "http://localhost:5000").replace(/\/+$/, "")}/api/auth`;
++const SERVER_URL = (import.meta.env.VITE_API_URL || "http://localhost:5000").replace(/\/+$/, "");
+ const AUTH_STORAGE_KEY = "anh-nguyet-auth";
+ const MAX_AVATAR_SIZE = 5 * 1024 * 1024;
+ 
+diff --git a/client/src/App.jsx b/client/src/App.jsx
+index 115781c..efaeb86 100644
+--- a/client/src/App.jsx
++++ b/client/src/App.jsx
+@@ -21,7 +21,7 @@ import iconTatCa from "./assets/icon-tat-ca.png";
+ 
+ import "./App.css";
+ 
+-const API_URL = "http://localhost:5000/api/products";
++const API_URL = `${(import.meta.env.VITE_API_URL || "http://localhost:5000").replace(/\/+$/, "")}/api/products`;
+ 
+ const categories = [
+   { name: "Bánh", icon: iconBanh },
+diff --git a/client/src/AuthPage.jsx b/client/src/AuthPage.jsx
+index e96e4c8..6f2b497 100644
+--- a/client/src/AuthPage.jsx
++++ b/client/src/AuthPage.jsx
+@@ -5,7 +5,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
+ import "./AuthPage.css";
+ import logo from "./assets/logo-anh-nguyet.png";
+ 
+-const API_URL = "http://localhost:5000/api/auth";
++const API_URL = `${(import.meta.env.VITE_API_URL || "http://localhost:5000").replace(/\/+$/, "")}/api/auth`;
+ const AUTH_STORAGE_KEY = "anh-nguyet-auth";
+ 
+ function AuthPage() {
+diff --git a/client/src/PasswordChangeForm.jsx b/client/src/PasswordChangeForm.jsx
+index d10f710..4e74bf8 100644
+--- a/client/src/PasswordChangeForm.jsx
++++ b/client/src/PasswordChangeForm.jsx
+@@ -2,7 +2,7 @@
+ import React, { useState } from "react";
+ import "./AccountPage-password-styles.css";
+ 
+-const API_URL = "http://localhost:5000/api/auth";
++const API_URL = `${(import.meta.env.VITE_API_URL || "http://localhost:5000").replace(/\/+$/, "")}/api/auth`;
+ const AUTH_STORAGE_KEY = "anh-nguyet-auth";
+ 
+ function getSavedToken() {
+diff --git a/client/src/ProductDetailPage.jsx b/client/src/ProductDetailPage.jsx
+index 1d33c79..5168424 100644
+--- a/client/src/ProductDetailPage.jsx
++++ b/client/src/ProductDetailPage.jsx
+@@ -5,7 +5,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
+ import "./ProductDetailPage.css";
+ import "./ProductsPage.css";
+ 
+-const API_URL = "http://localhost:5000/api/products";
++const API_URL = `${(import.meta.env.VITE_API_URL || "http://localhost:5000").replace(/\/+$/, "")}/api/products`;
+ 
+ const formatPrice = (price) =>
+   `${Number(price || 0).toLocaleString("vi-VN")}đ`;
+diff --git a/client/src/ProductsPage.jsx b/client/src/ProductsPage.jsx
+index 4dae81e..59cf853 100644
+--- a/client/src/ProductsPage.jsx
++++ b/client/src/ProductsPage.jsx
+@@ -6,7 +6,7 @@ import iconTrangTri from "./assets/icon-trang-tri.png";
+ 
+ import "./ProductsPage.css";
+ 
+-const API_URL = "http://localhost:5000/api/products";
++const API_URL = `${(import.meta.env.VITE_API_URL || "http://localhost:5000").replace(/\/+$/, "")}/api/products`;
+ 
+ const categoryGroups = [
+   {
+diff --git a/client/src/components/Header.jsx b/client/src/components/Header.jsx
+index b24f4ff..267eea6 100644
+--- a/client/src/components/Header.jsx
++++ b/client/src/components/Header.jsx
+@@ -7,7 +7,7 @@ import accountIcon from "../assets/icon-tai-khoan.png";
+ import "./Header.css";
+ 
+ const AUTH_STORAGE_KEY = "anh-nguyet-auth";
+-const SERVER_URL = "http://localhost:5000";
++const SERVER_URL = (import.meta.env.VITE_API_URL || "http://localhost:5000").replace(/\/+$/, "");
+ 
+ function getSavedUser() {
+   try {

@@ -66,7 +66,12 @@ function dispatchCartUpdate() {
 function dispatchCartSyncError(error) {
   window.dispatchEvent(
     new CustomEvent(CART_SYNC_ERROR_EVENT, {
-      detail: { message: error?.message || "Không thể đồng bộ giỏ hàng." },
+      detail: {
+        message:
+          error?.name === "TimeoutError"
+            ? "Máy chủ không phản hồi khi tải giỏ hàng."
+            : error?.message || "Không thể đồng bộ giỏ hàng.",
+      },
     }),
   );
 }
@@ -92,6 +97,7 @@ function syncAccountCart(scope, auth, items, version) {
         method: "PUT",
         headers: { Authorization: `Bearer ${auth.token}` },
         body: JSON.stringify({ items: requestItems }),
+        signal: AbortSignal.timeout(12000),
       });
       if (
         scope === activeScope &&
@@ -164,6 +170,7 @@ export async function loadCart() {
   const loadVersion = mutationVersion;
   const promise = apiRequest("/cart", {
     headers: { Authorization: `Bearer ${auth.token}` },
+    signal: AbortSignal.timeout(12000),
   })
     .then((result) => {
       if (
@@ -198,11 +205,17 @@ export async function loadCart() {
 export function addToCart(product, amount = 1) {
   const id = String(product._id ?? product.id ?? "");
   if (!id) throw new Error("Sản phẩm không có mã hợp lệ.");
+  if (product.active === false || product.active === 0) {
+    throw new Error("Sản phẩm hiện không kinh doanh.");
+  }
   const addAmount = Math.max(1, Math.floor(Number(amount) || 1));
   const existing = cart.find((item) => String(item._id ?? item.id) === id);
   const nextQuantity = Number(existing?.quantity || 0) + addAmount;
   const stock = Number(product.stock);
-  if (Number.isFinite(stock) && stock >= 0 && nextQuantity > stock) {
+  if (!Number.isFinite(stock) || stock < 0) {
+    throw new Error("Không xác định được tồn kho sản phẩm. Vui lòng tải lại trang.");
+  }
+  if (nextQuantity > stock) {
     throw new Error("Số lượng trong giỏ vượt quá tồn kho hiện tại.");
   }
 

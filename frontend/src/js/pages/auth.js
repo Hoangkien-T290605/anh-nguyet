@@ -22,6 +22,7 @@ export function mountAuth(mode) {
   const oXacNhanMatKhau = laDangKy
     ? bieuMau.elements["confirm-password"]
     : null;
+  let dangGui = false;
 
   anhLogo.src = LOGO_PATH;
 
@@ -64,6 +65,7 @@ export function mountAuth(mode) {
   // Kiểm tra dữ liệu ở trình duyệt trước khi gửi đến API phù hợp.
   bieuMau.addEventListener("submit", async (suKien) => {
     suKien.preventDefault();
+    if (dangGui) return;
     showError(thongBaoLoi, "");
 
     const duLieuBieuMau = Object.fromEntries(
@@ -115,6 +117,7 @@ export function mountAuth(mode) {
       : { email, password: oMatKhau.value };
 
     nutGui.disabled = true;
+    dangGui = true;
     nutGui.textContent = "Đang xử lý...";
     bieuMau.setAttribute("aria-busy", "true");
 
@@ -124,6 +127,7 @@ export function mountAuth(mode) {
         {
           method: "POST",
           body: JSON.stringify(duLieuGui),
+          signal: AbortSignal.timeout(12000),
         },
       );
 
@@ -143,9 +147,15 @@ export function mountAuth(mode) {
           /^account\.html\?tab=(profile|addresses|orders)$/.test(
             duongDanQuayLai,
           ) ||
-          ["checkout.html", "admin-orders.html"].includes(
+          [
+            "checkout.html",
+            "favorites.html",
+            "products.html",
+            "admin-orders.html",
+            "admin-reviews.html",
+          ].includes(
             duongDanQuayLai,
-          );
+          ) || /^product-detail\.html\?id=\d+$/.test(duongDanQuayLai);
         window.location.assign(
           duongDanAnToan ? duongDanQuayLai : "index.html",
         );
@@ -153,14 +163,23 @@ export function mountAuth(mode) {
       }
 
       if (laDangKy) {
+        if (!ketQua.user || typeof ketQua.user !== "object") {
+          throw new Error("Máy chủ trả về kết quả đăng ký không hợp lệ.");
+        }
         window.location.assign("login.html?registered=1");
         return;
       }
 
       throw new Error("Máy chủ không trả thông tin phiên đăng nhập hợp lệ.");
     } catch (loi) {
-      showError(thongBaoLoi, loi.message || "Đã xảy ra lỗi. Vui lòng thử lại.");
+      showError(
+        thongBaoLoi,
+        loi.name === "TimeoutError" || loi.name === "AbortError"
+          ? "Yêu cầu đã quá thời gian chờ. Vui lòng thử lại."
+          : loi.message || "Đã xảy ra lỗi. Vui lòng thử lại.",
+      );
     } finally {
+      dangGui = false;
       nutGui.disabled = false;
       nutGui.textContent = laDangKy ? "Đăng ký" : "Đăng nhập";
       bieuMau.removeAttribute("aria-busy");

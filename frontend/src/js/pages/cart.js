@@ -12,6 +12,22 @@ export async function mountCart() {
   const nutThanhToan = document.getElementById("checkout-button");
   let gioHang = readCart();
   let canhBaoDongBo = "";
+  let daXacMinhTonKho = false;
+
+  const matHangHopLe = (matHang) => {
+    const soLuong = Number(matHang.quantity);
+    const tonKho = Number(matHang.stock);
+    return (
+      !matHang.unavailable &&
+      matHang.active !== false &&
+      matHang.active !== 0 &&
+      Number.isSafeInteger(soLuong) &&
+      soLuong > 0 &&
+      Number.isFinite(tonKho) &&
+      tonKho > 0 &&
+      soLuong <= tonKho
+    );
+  };
 
   window.addEventListener("anh-nguyet-cart-dong-bo-loi", (suKien) => {
     canhBaoDongBo = suKien.detail?.message
@@ -36,14 +52,26 @@ export async function mountCart() {
     }
 
     khuVucTrong.hidden = true;
-    trangThai.hidden = !canhBaoDongBo;
-    trangThai.textContent = canhBaoDongBo;
     noiDungGioHang.hidden = false;
-    nutThanhToan.disabled = false;
+    const matHangKhongHopLe = gioHang.find(
+      (matHang) => !matHangHopLe(matHang),
+    );
+    const coMatHangKhongHopLe = Boolean(matHangKhongHopLe);
+    const canhBaoSanPham = matHangKhongHopLe
+      ? `${matHangKhongHopLe.unavailableReason || "Có sản phẩm không còn kinh doanh hoặc không đủ tồn kho."} Hãy xóa sản phẩm đó trước khi thanh toán.`
+      : "";
+    const thongBao = canhBaoDongBo || canhBaoSanPham;
+    trangThai.hidden = !thongBao;
+    trangThai.textContent = thongBao;
+    nutThanhToan.disabled =
+      !daXacMinhTonKho || coMatHangKhongHopLe;
 
     const tamTinh = gioHang.reduce(
       (tong, matHang) =>
-        tong + Number(matHang.price || 0) * Number(matHang.quantity || 0),
+        tong +
+        (matHangHopLe(matHang)
+          ? Number(matHang.price || 0) * Number(matHang.quantity || 0)
+          : 0),
       0,
     );
     const tongSoLuong = gioHang.reduce(
@@ -64,6 +92,7 @@ export async function mountCart() {
         const maSanPham = String(matHang._id ?? matHang.id);
         const urlAnh = getProductImageUrl(matHang.image);
         const tonKhoToiDa = Math.max(0, Number(matHang.stock) || 0);
+        const khaDung = matHangHopLe(matHang);
 
         return `<article class="cart-item" data-cart-item="${escapeHTML(maSanPham)}">
           <a class="cart-item-image" href="product-detail.html?id=${encodeURIComponent(maSanPham)}">
@@ -71,9 +100,9 @@ export async function mountCart() {
             <span class="cart-item-placeholder-empty" ${urlAnh ? "hidden" : ""}>❋</span>
           </a>
           <div class="cart-item-info">
-            <span class="cart-item-category">${escapeHTML(matHang.category || "Sản phẩm")}</span>
+            <span class="cart-item-category">${khaDung ? escapeHTML(matHang.category || "Sản phẩm") : "Không khả dụng"}</span>
             <h3><a href="product-detail.html?id=${encodeURIComponent(maSanPham)}">${escapeHTML(matHang.name || "Sản phẩm")}</a></h3>
-            <strong>${formatPrice(matHang.price)}</strong>
+            <strong>${khaDung ? formatPrice(matHang.price) : "Không có giá hiện tại"}</strong>
             <button class="cart-delete" type="button" data-delete="${escapeHTML(maSanPham)}">Xóa sản phẩm</button>
           </div>
           <div class="cart-item-quantity">
@@ -81,12 +110,12 @@ export async function mountCart() {
             <div class="quantity-control-control">
               <button type="button" data-min="${escapeHTML(maSanPham)}" aria-label="Giảm số lượng">−</button>
               <strong>${Number(matHang.quantity) || 1}</strong>
-              <button type="button" data-max="${escapeHTML(maSanPham)}" aria-label="Tăng số lượng" ${Number(matHang.quantity) >= tonKhoToiDa ? "disabled" : ""}>+</button>
+              <button type="button" data-max="${escapeHTML(maSanPham)}" aria-label="Tăng số lượng" ${!khaDung || Number(matHang.quantity) >= tonKhoToiDa ? "disabled" : ""}>+</button>
             </div>
           </div>
           <div class="cart-item-tong">
             <span>Thành tiền</span>
-            <strong>${formatPrice(Number(matHang.price || 0) * Number(matHang.quantity || 0))}</strong>
+            <strong>${khaDung ? formatPrice(Number(matHang.price || 0) * Number(matHang.quantity || 0)) : "—"}</strong>
           </div>
         </article>`;
       })
@@ -152,7 +181,7 @@ export async function mountCart() {
   });
 
   nutThanhToan.addEventListener("click", () => {
-    if (!gioHang.length) return;
+    if (!gioHang.length || nutThanhToan.disabled) return;
     window.location.assign("checkout.html");
   });
 
@@ -172,24 +201,52 @@ export async function mountCart() {
             String(matHang._id ?? matHang.id) ===
             String(matHangDaLuu._id ?? matHangDaLuu.id),
         );
-        if (!product) return [{ ...matHangDaLuu, unavailable: true }];
+        if (!product) {
+          return [
+            {
+              ...matHangDaLuu,
+              unavailable: true,
+              unavailableReason: "Sản phẩm không còn trong danh sách kinh doanh.",
+            },
+          ];
+        }
 
         const tonKhoToiDa = Math.max(0, Number(product.stock) || 0);
+        if (
+          product.active === false ||
+          product.active === 0 ||
+          tonKhoToiDa === 0
+        ) {
+          return [
+            {
+              ...product,
+              quantity: Math.max(1, Number(matHangDaLuu.quantity) || 1),
+              unavailable: true,
+              unavailableReason:
+                product.active === false || product.active === 0
+                  ? "Sản phẩm hiện không kinh doanh."
+                  : "Sản phẩm hiện đã hết hàng.",
+            },
+          ];
+        }
+
+        const soLuongCu = Math.max(
+          1,
+          Math.floor(Number(matHangDaLuu.quantity) || 1),
+        );
         return [
           {
             ...product,
-            quantity: Math.max(
-              1,
-              Math.min(
-                Number(matHangDaLuu.quantity) || 1,
-                tonKhoToiDa || Number(matHangDaLuu.quantity) || 1,
-              ),
-            ),
+            quantity: Math.min(soLuongCu, tonKhoToiDa),
+            unavailable: false,
+            unavailableReason: "",
           },
         ];
       });
+      daXacMinhTonKho = true;
       writeCart(gioHang);
     } catch (loi) {
+      daXacMinhTonKho = false;
       canhBaoDongBo = `Không thể đồng bộ giá và tồn kho từ máy chủ (${loi.message}). Đang hiển thị thông tin đã lưu trên thiết bị.`;
     }
   }

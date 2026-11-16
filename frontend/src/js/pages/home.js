@@ -1,6 +1,8 @@
 // Trang chủ tải danh mục và sản phẩm nổi bật từ Backend.
 import { apiRequest, getProductImageUrl } from "../services/api.js";
+import { createProductSearchMatcher } from "../services/product-search.js";
 import { addToCart } from "../services/cart.js";
+import { loadFavoriteProducts, readFavoriteSession, requireFavoriteLogin, saveFavoriteState } from "../services/favorites.js";
 
 const heroImageUrl = "./assets/header-panel.png";
 const decorationUrl = "./assets/icon-decoration.png";
@@ -25,6 +27,7 @@ let selectedCategory = "Tất cả";
 let searchTerm = "";
 let toastTimer;
 const favoriteIds = new Set();
+let favoriteSession = null;
 
 // Mã hóa dữ liệu hiển thị để giữ an toàn cấu trúc HTML.
 function escapeHTML(value = "") {
@@ -97,7 +100,7 @@ function createProductCard(product, index) {
         <h3>${escapeHTML(product.name)}</h3>
         <p class="product-detail">${escapeHTML(product.description || product.category || "")}</p>
         <strong class="product-price">${formatPrice(product.price)}</strong>
-        <div class="product-rating"><span>${escapeHTML(product.category || "")}</span></div>
+        <div class="product-rating">${Number(product.review_count) > 0 ? `<span class="product-rating-score">★ ${Number(product.average_rating || 0).toFixed(1)}</span><small>${Number(product.review_count)} đánh giá</small>` : '<span class="product-rating-empty">Chưa có đánh giá</span>'}</div>
         <button class="add-button" type="button" data-add-cart="${escapeHTML(id)}" ${available ? "" : "disabled"}><span aria-hidden="true">🛒</span>${available ? "Thêm vào giỏ hàng" : "Tạm hết hàng"}</button>
       </div>
     </article>`;
@@ -107,12 +110,11 @@ function createProductCard(product, index) {
 function renderProducts() {
   const grid = document.getElementById("product-grid");
   const status = document.getElementById("product-status");
-  const query = searchTerm.trim().toLocaleLowerCase("vi");
+  const matchesName = createProductSearchMatcher(allProducts, searchTerm);
   const visible = allProducts.filter((product) => {
-    const name = String(product.name || "").toLocaleLowerCase("vi");
     return (
       (selectedCategory === "Tất cả" || product.category === selectedCategory) &&
-      name.includes(query) &&
+      matchesName(product) &&
       product.active !== false &&
       product.active !== 0
     );
@@ -149,7 +151,7 @@ function renderProducts() {
 // Gắn thao tác mở chi tiết, yêu thích và thêm vào giỏ hàng.
 function bindProductActions() {
   const grid = document.getElementById("product-grid");
-  grid.addEventListener("click", (event) => {
+  grid.addEventListener("click", async (event) => {
     const addButton = event.target.closest("[data-add-cart]");
     if (addButton) {
       event.stopPropagation();
@@ -170,20 +172,23 @@ function bindProductActions() {
     if (favorite) {
       event.stopPropagation();
       const id = favorite.dataset.favorite;
-      if (favoriteIds.has(id)) {
-        favoriteIds.delete(id);
-        favorite.classList.remove("is-favorite");
-        favorite.setAttribute("aria-label", "Thêm vào yêu thích");
-        favorite.setAttribute("aria-pressed", "false");
-        favorite.textContent = "♡";
-        showToast("Đã bỏ sản phẩm khỏi danh sách yêu thích.");
-      } else {
-        favoriteIds.add(id);
-        favorite.classList.add("is-favorite");
-        favorite.setAttribute("aria-label", "Bỏ yêu thích");
-        favorite.setAttribute("aria-pressed", "true");
-        favorite.textContent = "♥";
-        showToast("Đã thêm sản phẩm vào danh sách yêu thích.");
+      if (!favoriteSession) return requireFavoriteLogin();
+      const willFavorite = !favoriteIds.has(id);
+      try {
+        await saveFavoriteState(id, willFavorite, favoriteSession);
+        willFavorite ? favoriteIds.add(id) : favoriteIds.delete(id);
+        favorite.classList.toggle("is-favorite", willFavorite);
+        favorite.setAttribute("aria-label", willFavorite ? "Bỏ yêu thích" : "Thêm vào yêu thích");
+        favorite.setAttribute("aria-pressed", String(willFavorite));
+        favorite.textContent = willFavorite ? "♥" : "♡";
+        showToast(willFavorite ? "Đã thêm sản phẩm vào danh sách yêu thích." : "Đã bỏ sản phẩm khỏi danh sách yêu thích.");
+      } catch (error) {
+        if (error.status === 401) {
+          localStorage.removeItem("anh-nguyet-auth");
+          window.dispatchEvent(new CustomEvent("anh-nguyet-xac-thuc-cap-nhat", { detail: { user: null } }));
+          return requireFavoriteLogin();
+        }
+        showToast(error.message || "Không thể cập nhật danh sách yêu thích.");
       }
       return;
     }
@@ -205,6 +210,21 @@ function bindProductActions() {
 
 // Tải dữ liệu trang chủ và khởi tạo các khu vực tương tác.
 export async function mountHome() {
+  favoriteSession = readFavoriteSession();
+  favoriteIds.clear();
+  if (favoriteSession) {
+    try {
+      (await loadFavoriteProducts(favoriteSession)).forEach((product) =>
+        favoriteIds.add(String(product.id ?? product._id)),
+      );
+    } catch (error) {
+      if (error.status === 401) {
+        localStorage.removeItem("anh-nguyet-auth");
+        favoriteSession = null;
+        window.dispatchEvent(new CustomEvent("anh-nguyet-xac-thuc-cap-nhat", { detail: { user: null } }));
+      }
+    }
+  }
   document.querySelector("[data-hero]").src = heroImageUrl;
   document.querySelectorAll("[data-decoration]").forEach((image) => {
     image.src = decorationUrl;

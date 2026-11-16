@@ -75,8 +75,11 @@
           <label class="admin-product-field-wide">Mô tả
             <textarea name="description" rows="4"></textarea>
           </label>
-          <label class="admin-product-field-wide">Ảnh sản phẩm — tên tệp hiện có hoặc URL ảnh
+          <label class="admin-product-field-wide">Ảnh hiện tại — tên tệp hoặc URL
             <input name="image" type="text" maxlength="2048" placeholder="ten-anh.png hoặc https://..." autocomplete="off" />
+          </label>
+          <label class="admin-product-field-wide">Tải ảnh mới (JPG, PNG, WEBP hoặc GIF; tối đa 5 MB)
+            <input name="imageFile" type="file" accept="image/jpeg,image/png,image/webp,image/gif,.jpg,.jpeg,.png,.webp,.gif" data-product-image-file />
           </label>
           <div class="admin-product-preview-wrap admin-product-field-wide">
             <span>Xem trước</span>
