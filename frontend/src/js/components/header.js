@@ -64,7 +64,7 @@ function renderAccount() {
 
   if (!user) {
     mount.innerHTML =
-      '<div class="account-guest"><a href="login.html">Đăng nhập</a><span class="account-divider">|</span><a href="register.html">Đăng ký</a></div>';
+      '<div class="account-guest"><a class="account-guest-login" href="login.html">Đăng nhập</a><a class="account-guest-register" href="register.html">Đăng ký</a></div>';
     return;
   }
 
@@ -87,8 +87,7 @@ function renderAccount() {
       <div class="account-menu" data-account-menu hidden>
         <div class="account-menu-heading"><span class="account-menu-name">${name}</span><span class="account-menu-email">${escapeHTML(user.email || "")}</span></div>
         <a class="account-menu-item" href="account.html"><span class="account-menu-icon"><img src="${accountIconUrl}" alt="" /></span>Tài khoản của tôi</a>
-        <a class="account-menu-item" href="favorites.html"><span>♡</span>Sản phẩm yêu thích</a>
-        ${verifiedToken === session.token && verifiedUser?.role === "admin" ? '<a class="account-menu-item" href="admin-dashboard.html"><span>⌂</span>Khu vực quản trị</a>' : ""}
+        ${verifiedToken === session.token && verifiedUser?.role === "admin" ? '<a class="account-menu-item" href="admin-dashboard.html"><span>⌂</span>Khu vực quản trị</a>' : verifiedToken === session.token && verifiedUser?.role === "employee" ? '<a class="account-menu-item" href="employee-dashboard.html"><span>⌂</span>Khu vực Nhân viên</a>' : ""}
         <a class="account-menu-item" href="account.html?tab=orders"><span>▤</span>Đơn mua</a>
         <div class="account-menu-divider"></div>
         <button class="account-menu-item account-menu-state-display" type="button" data-state-display><span>↪</span>Đăng xuất</button>

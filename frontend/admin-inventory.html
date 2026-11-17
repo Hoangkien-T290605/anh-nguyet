@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#7041a6" />
+    <link rel="stylesheet" href="./site.css" />
+    <link rel="stylesheet" href="./admin.css" />
+    <title>Quản lý tồn kho | Ánh Nguyệt</title>
+  </head>
+  <body data-admin-page="inventory">
+    <div id="admin-gate" class="admin-gate" role="status">Đang xác minh quyền quản trị...</div>
+    <div id="admin-app" class="admin-app" hidden>
+      <aside id="admin-sidebar" class="admin-sidebar"></aside>
+      <div class="admin-main-column"><header id="admin-topbar" class="admin-topbar"></header>
+        <main id="admin-content" class="admin-content admin-operations-page">
+          <section class="admin-page-heading"><span>QUẢN LÝ HÀNG HÓA</span><h1>Quản lý tồn kho</h1><p>Kiểm tra số lượng hiện tại, ghi nhận nhập/xuất kho và xem lịch sử biến động. Mốc “sắp hết” hiện hiển thị ở mức 5 sản phẩm.</p></section>
+          <section class="admin-products-panel">
+            <div class="admin-operations-toolbar">
+              <label>Tìm sản phẩm<input data-inventory-search type="search" placeholder="Tên hoặc mã sản phẩm" /></label>
+              <label>Danh mục<select data-inventory-category><option value="">Tất cả danh mục</option></select></label>
+              <label>Tình trạng<select data-inventory-status><option value="all">Tất cả</option><option value="available">Còn hàng</option><option value="low">Sắp hết (1–5)</option><option value="out">Hết hàng</option></select></label>
+            </div>
+            <p class="admin-products-message" data-inventory-message role="status" aria-live="polite">Đang tải tồn kho...</p>
+            <div class="admin-products-table-wrap" data-inventory-table-wrap hidden><table class="admin-products-table"><thead><tr><th>Mã</th><th>Sản phẩm</th><th>Danh mục</th><th>Tồn hiện tại</th><th>Trạng thái</th><th>Thao tác</th></tr></thead><tbody data-inventory-rows></tbody></table></div>
+            <nav class="admin-products-pagination" data-inventory-pagination aria-label="Phân trang tồn kho" hidden></nav>
+          </section>
+        </main>
+      </div>
+    </div>
+    <dialog class="admin-operation-dialog" data-inventory-dialog><form data-inventory-form><header><h2 data-inventory-dialog-title>Điều chỉnh tồn kho</h2><button type="button" data-inventory-close aria-label="Đóng">×</button></header><p data-inventory-product></p><label>Loại biến động<select name="movement_type" required><option value="inbound">Nhập kho</option><option value="outbound">Xuất kho</option></select></label><label>Số lượng<input name="quantity" type="number" min="1" max="1000000" step="1" required /></label><label>Lý do<input name="note" maxlength="500" required /></label><p data-inventory-form-message role="alert" hidden></p><footer><button type="button" data-inventory-close>Hủy</button><button class="admin-primary-button" type="submit" data-inventory-save>Ghi nhận</button></footer></form></dialog>
+    <dialog class="admin-operation-dialog" data-inventory-history><header><h2>Lịch sử biến động</h2><button type="button" data-inventory-history-close aria-label="Đóng">×</button></header><p data-inventory-history-message role="status"></p><div data-inventory-history-content></div></dialog>
+    <script src="./config.js"></script><script type="module" src="./src/js/admin/main.js"></script>
+  </body>
+</html>

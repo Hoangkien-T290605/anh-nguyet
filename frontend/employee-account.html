@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="vi">
+  <head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="theme-color" content="#7041a6" /><link rel="stylesheet" href="./site.css" /><link rel="stylesheet" href="./admin.css" /><title>Tài khoản Nhân viên | Ánh Nguyệt</title></head>
+  <body data-admin-page="employee-account"><div id="admin-gate" class="admin-gate" role="status">Đang xác minh quyền Nhân viên...</div>
+    <div id="admin-app" class="admin-app" hidden><aside id="admin-sidebar" class="admin-sidebar"></aside><div class="admin-main-column"><header id="admin-topbar" class="admin-topbar"></header>
+      <main id="admin-content" class="admin-content admin-operations-page"><section class="admin-page-heading"><span>HỒ SƠ CÁ NHÂN</span><h1>Tài khoản Nhân viên</h1><p>Cập nhật thông tin cá nhân và đổi mật khẩu tài khoản.</p></section>
+        <p data-employee-account-message class="admin-products-message" role="status" aria-live="polite">Đang tải hồ sơ...</p><div class="admin-account-grid">
+          <section class="admin-operations-card"><h2>Hồ sơ của tôi</h2><form data-employee-profile-form hidden><label>Họ và tên<input name="full_name" maxlength="100" required /></label><label>Email<input name="email" type="email" readonly /></label><label>Số điện thoại<input name="phone" maxlength="20" /></label><button class="admin-primary-button" type="submit">Lưu hồ sơ</button></form></section>
+          <section class="admin-operations-card"><h2>Đổi mật khẩu</h2><form data-employee-password-request><label>Mật khẩu hiện tại<input name="current_password" type="password" autocomplete="current-password" required /></label><label>Mật khẩu mới<input name="new_password" type="password" minlength="8" maxlength="72" autocomplete="new-password" required /></label><label>Nhập lại mật khẩu mới<input name="confirm_password" type="password" minlength="8" maxlength="72" autocomplete="new-password" required /></label><button class="admin-primary-button" type="submit">Gửi mã xác nhận</button></form><form data-employee-password-verify hidden><label>Mã OTP 6 chữ số<input name="otp" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required /></label><button class="admin-primary-button" type="submit">Xác nhận đổi mật khẩu</button></form><p data-employee-password-message role="status" aria-live="polite"></p></section>
+        </div>
+      </main></div></div><script src="./config.js"></script><script type="module" src="./src/js/admin/main.js"></script>
+  </body>
+</html>

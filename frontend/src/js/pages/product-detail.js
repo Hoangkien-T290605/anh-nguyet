@@ -1,7 +1,6 @@
-// Trang chi tiết tải sản phẩm, đánh giá và thao tác giỏ hàng/yêu thích.
+// Trang chi tiết tải sản phẩm, đánh giá và thao tác giỏ hàng.
 import { apiRequest, getApiAssetUrl, getProductImageUrl } from "../services/api.js";
 import { addToCart, readCart } from "../services/cart.js";
-import { loadFavoriteProducts, readFavoriteSession, requireFavoriteLogin, saveFavoriteState } from "../services/favorites.js";
 import {
   bindImageFallback,
   escapeHTML,
@@ -13,6 +12,15 @@ class ProductNotFoundError extends Error {
   constructor() {
     super("Không tìm thấy sản phẩm này.");
     this.name = "ProductNotFoundError";
+  }
+}
+
+function readAccountSession() {
+  try {
+    const session = JSON.parse(localStorage.getItem("anh-nguyet-auth") || "null");
+    return session?.token && session?.user?.id ? session : null;
+  } catch {
+    return null;
   }
 }
 
@@ -69,17 +77,17 @@ function getProductImages(product) {
       additional = [];
     }
   }
-  const candidates = [
-    product.image,
-    ...(Array.isArray(additional) ? additional : []),
-  ];
+  const galleryItems = Array.isArray(additional) ? additional : [];
+  // Ảnh bìa từ products.image luôn đứng đầu; ảnh phụ giữ thứ tự trong gallery.
+  const candidates = [product.image, ...galleryItems];
   const urls = candidates
     .map((item) => {
       const value = typeof item === "string"
         ? item
-        : item?.url || item?.src || item?.path || item?.location;
+        : item?.image_url || item?.url || item?.src || item?.path || item?.location;
       if (typeof value !== "string" || !value.trim()) return "";
       const source = value.trim();
+      if (source.startsWith("/uploads/")) return getApiAssetUrl(source);
       if (
         /^https?:\/\//i.test(source) ||
         source.startsWith("/") ||
@@ -144,14 +152,14 @@ export async function mountProductDetail() {
   }
 
   try {
-    const favoriteSession = readFavoriteSession();
+    const session = readAccountSession();
     const loadProductReviews = async () => {
       const path = `/products/${encodeURIComponent(id)}/reviews`;
-      if (!favoriteSession) return apiRequest(path, { signal: AbortSignal.timeout(12000) }).catch(() => null);
+      if (!session) return apiRequest(path, { signal: AbortSignal.timeout(12000) }).catch(() => null);
       try {
         return await apiRequest(path, {
           signal: AbortSignal.timeout(12000),
-          headers: { Authorization: `Bearer ${favoriteSession.token}` },
+          headers: { Authorization: `Bearer ${session.token}` },
         });
       } catch (error) {
         if (error.status !== 401) return null;
@@ -159,11 +167,11 @@ export async function mountProductDetail() {
       }
     };
     const loadOwnReview = async () => {
-      if (!favoriteSession) return null;
+      if (!session) return null;
       try {
         return await apiRequest(
           `/products/${encodeURIComponent(id)}/reviews/mine`,
-          { headers: { Authorization: `Bearer ${favoriteSession.token}` } },
+          { headers: { Authorization: `Bearer ${session.token}` } },
         );
       } catch {
         return null;
@@ -191,47 +199,60 @@ export async function mountProductDetail() {
     if (product.price === null || product.price === undefined || product.price === "" || !Number.isFinite(price) || price < 0) {
       throw new Error("Dữ liệu giá sản phẩm không hợp lệ.");
     }
-    const images = getProductImages(product);
+    let images = getProductImages(product);
+    try {
+      const gallery = await apiRequest(`/products/${encodeURIComponent(id)}/images`, {
+        signal: AbortSignal.timeout(12000),
+      });
+      if (Array.isArray(gallery.data) && gallery.data.length) {
+        images = getProductImages({ image: product.image, images: gallery.data });
+      }
+    } catch {
+      // API cũ hoặc migration chưa chạy: ảnh bìa từ products.image vẫn hoạt động.
+    }
+    let selectedImageIndex = 0;
     const reviews = Array.isArray(reviewResponse?.data)
       ? reviewResponse.data
       : [];
     let reviewEligibility = null;
     let reviewEligibilityError = "";
-    if (favoriteSession) {
+    if (session) {
       try {
         const eligibility = await apiRequest(
           `/products/${encodeURIComponent(id)}/reviews/eligibility`,
-          { headers: { Authorization: `Bearer ${favoriteSession.token}` } },
+          { headers: { Authorization: `Bearer ${session.token}` } },
         );
         reviewEligibility = eligibility.data;
       } catch (error) {
         reviewEligibilityError = error.message || "Không thể kiểm tra điều kiện đánh giá.";
       }
     }
-    const favoriteProducts = new Set();
-    if (favoriteSession) {
-      try {
-        (await loadFavoriteProducts(favoriteSession)).forEach((item) =>
-          favoriteProducts.add(String(item.id ?? item._id)),
-        );
-      } catch (error) {
-        if (error.status === 401) {
-          localStorage.removeItem("anh-nguyet-auth");
-          window.dispatchEvent(new CustomEvent("anh-nguyet-xac-thuc-cap-nhat", { detail: { user: null } }));
-        }
-      }
-    }
     const summary = reviewResponse?.summary || {};
     const rating = Number(summary.averageRating) || 0;
     const reviewCount = Number(summary.totalReviews) || 0;
+    const productDetails = product.product_details && typeof product.product_details === "object"
+      ? product.product_details
+      : {};
+    const detailSpecifications = productDetails.specifications && typeof productDetails.specifications === "object"
+      ? Object.entries(productDetails.specifications).map(([name, value]) => `${name}: ${value}`).join(" · ")
+      : "";
     const fields = [
-      ["Danh mục", product.category],
-      ["Thành phần", product.ingredients],
-      ["Thông số sản phẩm", product.specifications],
-      ["Chất liệu", product.material],
-      ["Xuất xứ", product.origin],
-      ["Hạn sử dụng", product.expiryDate],
-    ];
+      ["Thành phần", productDetails.ingredients],
+      ["Nơi sản xuất", productDetails.manufacturer],
+      ["Thương hiệu", productDetails.brand],
+      ["Khối lượng", productDetails.weight],
+      ["Dung tích", productDetails.volume],
+      ["Thông số bổ sung", detailSpecifications],
+      ["Xuất xứ", productDetails.origin],
+      ["Hạn sử dụng", productDetails.expiry],
+      ["Bảo quản", productDetails.storage],
+      ["Hướng dẫn sử dụng", productDetails.usage],
+      ["Quy cách đóng gói", productDetails.packaging],
+      ["Thông tin bổ sung", productDetails.additional_info],
+    ].filter(([, value]) => typeof value === "string" && value.trim());
+    const detailedDescription = typeof product.description === "string"
+      ? product.description.trim()
+      : "";
     const related = products
       .filter(
         (item) =>
@@ -244,7 +265,7 @@ export async function mountProductDetail() {
     const ownReviewHiddenNotice = ownReview && ownReview.is_visible === false
       ? `<p class="detail-review-access">Đánh giá này đang bị Admin ẩn. Chỉ bạn có thể xem và quản lý nội dung tại đây.</p>`
       : "";
-    const reviewFormHtml = !favoriteSession
+    const reviewFormHtml = !session
       ? `<p class="detail-review-access">Bạn cần <a href="login.html?returnTo=${encodeURIComponent(`product-detail.html?id=${id}`)}">đăng nhập</a> để gửi đánh giá.</p>`
       : ownReview
         ? `<form class="detail-review-form" data-review-form data-review-id="${escapeHTML(ownReview.id)}"><h3>Chỉnh sửa đánh giá của bạn</h3>${ownReviewHiddenNotice}<div class="detail-own-review-content"><strong>Đánh giá hiện tại: ${Number(ownReview.rating)} / 5 sao</strong><p>${escapeHTML(ownReview.comment || "(Không có nhận xét)")}</p></div><label>Điểm đánh giá<select name="rating" required>${[5, 4, 3, 2, 1].map((star) => `<option value="${star}" ${Number(ownReview.rating) === star ? "selected" : ""}>${star} sao</option>`).join("")}</select></label><label>Nhận xét<textarea name="comment" rows="4" maxlength="3000" placeholder="Chia sẻ trải nghiệm của bạn">${escapeHTML(ownReview.comment || "")}</textarea></label><label>Thêm ảnh (tối đa 5 ảnh tổng cộng, mỗi ảnh 5 MB)<input type="file" name="images" accept="image/jpeg,image/png,image/webp,image/gif" multiple data-review-images data-review-existing="${Array.isArray(ownReview.media) ? ownReview.media.length : 0}"></label><div class="review-image-preview" data-review-preview></div><p data-review-form-status role="status" aria-live="polite" hidden></p><div class="review-form-actions"><button class="account-primary-button" type="submit">Lưu chỉnh sửa</button><button class="account-delete-button" type="button" data-review-delete="${escapeHTML(ownReview.id)}">Xóa đánh giá</button></div></form>`
@@ -259,10 +280,10 @@ export async function mountProductDetail() {
       <section class="product-detail-content">
         <div class="detail-retry-vien-image">
           <div class="detail-image-hop" id="detail-image-hop">${images.length ? `<img src="${escapeHTML(images[0])}" alt="${escapeHTML(product.name)}" id="detail-image" data-detail-image>` : '<div class="detail-image-placeholder-empty" aria-label="Không có ảnh sản phẩm"><span>✿</span><p>ÁNH NGUYỆT</p></div>'}</div>
-          ${images.length > 1 ? `<div class="detail-image-retry-small-list" aria-label="Ảnh sản phẩm">${images.map((image, index) => `<button type="button" class="detail-image-retry-small ${index === 0 ? "is-active" : ""}" data-image-index="${index}" aria-label="Xem hình ảnh ${index + 1}" aria-pressed="${index === 0}"><img src="${escapeHTML(image)}" alt="${escapeHTML(product.name)} ${index + 1}" data-detail-image></button>`).join("")}</div>` : ""}
+          ${images.length ? `<div class="detail-image-retry-small-list" aria-label="Ảnh sản phẩm">${images.map((image, index) => `<button type="button" class="detail-image-retry-small ${index === 0 ? "is-active" : ""}" data-image-index="${index}" aria-label="Xem hình ảnh ${index + 1}" aria-pressed="${index === 0}"><img src="${escapeHTML(image)}" alt="${escapeHTML(product.name)} ${index + 1}" data-detail-image></button>`).join("")}</div>` : ""}
         </div>
         <div class="detail-info">
-          <p class="detail-eyebrow">ÁNH NGUYỆT COLLECTION</p><span class="detail-category">${escapeHTML(product.category || "Chưa phân loại")}</span><h1>${escapeHTML(product.name)}</h1>
+          <p class="detail-eyebrow">ÁNH NGUYỆT COLLECTION</p><span class="detail-category">${escapeHTML(product.category || "Chưa phân loại")}</span><h1>${escapeHTML(product.name)}</h1>${productDetails.short_description ? `<p class="detail-short-description">${escapeHTML(productDetails.short_description)}</p>` : ""}
           <div class="detail-rating-summary">${reviewCount ? `<strong>${rating.toFixed(1)} / 5</strong>${renderStars(rating)}<span>${reviewCount} đánh giá</span>` : '<span class="product-rating-empty">Chưa có đánh giá</span>'}</div>
           <p class="detail-code">Mã sản phẩm: #${escapeHTML(product.id ?? product._id)}</p><strong class="detail-price">${formatPrice(product.price)}</strong>
           <div class="detail-stock"><span>Tình trạng:</span>${!hasValidStock ? '<strong class="out-stock">Chưa xác định được tồn kho</strong>' : stock > 0 ? `<strong class="in-stock">Còn hàng (${stock} sản phẩm)</strong>` : '<strong class="out-stock">Tạm hết hàng</strong>'}</div>
@@ -271,8 +292,8 @@ export async function mountProductDetail() {
           <div class="detail-purchase-actions"><button type="button" class="detail-add-button" data-detail-add ${!hasValidStock || stock <= 0 ? "disabled" : ""}>🛒 Thêm vào giỏ hàng</button><button type="button" class="detail-buy-button" data-detail-buy ${!hasValidStock || stock <= 0 ? "disabled" : ""}>Mua ngay</button></div>
         </div>
       </section>
-      <section class="detail-section"><h2>THÔNG TIN CHI TIẾT</h2><div class="detail-notice-number-list">${fields.map(([label, value]) => `<div class="detail-notice-number-row"><span>${escapeHTML(label)}</span><strong>${escapeHTML(value || "Chưa cập nhật")}</strong></div>`).join("")}</div></section>
-      <section class="detail-section"><h2>MÔ TẢ SẢN PHẨM</h2><div class="detail-full-full-description"><p>${escapeHTML(product.description || "Thông tin mô tả sản phẩm đang được cập nhật.")}</p></div></section>
+      ${fields.length ? `<section class="detail-section"><h2>THÔNG TIN CHI TIẾT</h2><div class="detail-notice-number-list">${fields.map(([label, value]) => `<div class="detail-notice-number-row"><span>${escapeHTML(label)}</span><strong>${escapeHTML(value.trim())}</strong></div>`).join("")}</div></section>` : ""}
+      ${detailedDescription ? `<section class="detail-section"><h2>MÔ TẢ CHI TIẾT SẢN PHẨM</h2><div class="detail-full-full-description"><p>${escapeHTML(detailedDescription)}</p></div></section>` : ""}
       <section class="detail-section" id="rating"><h2>ĐÁNH GIÁ KHÁCH HÀNG</h2>${reviewCount ? `<div class="detail-rating-summary"><div class="detail-rating-score"><strong>${rating.toFixed(1)}</strong><span>/ 5</span></div><div class="detail-rating-score-info">${renderStars(rating, "large")}<p>${reviewCount} đánh giá</p></div></div>` : '<p class="product-rating-empty">Chưa có đánh giá</p>'}
         <div class="detail-rating-all-filter" aria-label="Lọc đánh giá">${[{ value: "all", label: "Tất cả", count: reviewCount }, ...[5, 4, 3, 2, 1].map((n) => ({ value: String(n), label: `${n} sao`, count: Number(summary.ratingCounts?.[n]) || 0 })), { value: "media", label: "Có ảnh/video", count: Number(summary.mediaCount) || 0 }].map((filter, index) => `<button type="button" class="detail-rating-filter ${index === 0 ? "is-active" : ""}" data-rating-filter="${filter.value}" aria-pressed="${index === 0}">${filter.label}<span>(${filter.count})</span></button>`).join("")}</div>
         ${reviewFormHtml}
@@ -286,7 +307,7 @@ export async function mountProductDetail() {
           .join("")}</div>
         ${reviews.length ? "" : `<p class="detail-empty">${reviewResponse ? "Sản phẩm chưa có đánh giá của khách hàng." : "Không thể tải đánh giá sản phẩm."}</p>`}
       </section>
-      <section class="detail-section"><h2>SẢN PHẨM LIÊN QUAN</h2>${related.length ? `<div class="product-grid">${related.map((item, index) => createProductCard(item, index, favoriteProducts)).join("")}</div>` : '<p class="detail-empty">Chưa có sản phẩm liên quan.</p>'}</section>`;
+      <section class="detail-section"><h2>SẢN PHẨM LIÊN QUAN</h2>${related.length ? `<div class="product-grid">${related.map((item, index) => createProductCard(item, index)).join("")}</div>` : '<p class="detail-empty">Chưa có sản phẩm liên quan.</p>'}</section>`;
 
     const quantityInput = root.querySelector("#detail-quantity");
     // Giới hạn số lượng theo tồn kho rồi cập nhật thành tiền.
@@ -330,14 +351,24 @@ export async function mountProductDetail() {
       }));
     });
     root.addEventListener("click", async (event) => {
+      const thumbnail = event.target.closest("[data-image-index]");
+      if (thumbnail) {
+        showProductImage(Number(thumbnail.dataset.imageIndex));
+        openProductZoom(selectedImageIndex);
+        return;
+      }
+      if (event.target.closest("#detail-image")) {
+        openProductZoom(selectedImageIndex);
+        return;
+      }
       const deleteReview = event.target.closest("[data-review-delete]");
       if (deleteReview) {
-        if (!favoriteSession || !window.confirm("Bạn có chắc muốn xóa đánh giá này?")) return;
+        if (!session || !window.confirm("Bạn có chắc muốn xóa đánh giá này?")) return;
         deleteReview.disabled = true;
         try {
           await apiRequest(`/products/${encodeURIComponent(id)}/reviews/${encodeURIComponent(deleteReview.dataset.reviewDelete)}`, {
             method: "DELETE",
-            headers: { Authorization: `Bearer ${favoriteSession.token}` },
+            headers: { Authorization: `Bearer ${session.token}` },
           });
           window.location.reload();
         } catch (error) {
@@ -367,22 +398,6 @@ export async function mountProductDetail() {
           Number(quantityInput.value) +
             (quantityButton.dataset.quantity === "plus" ? 1 : -1),
         );
-      const thumbnail = event.target.closest("[data-image-index]");
-      if (thumbnail) {
-        const src = images[Number(thumbnail.dataset.imageIndex)];
-        if (src) {
-          root.querySelector("#detail-image-hop").innerHTML =
-            `<img src="${escapeHTML(src)}" alt="${escapeHTML(product.name)}" id="detail-image" data-detail-image>`;
-          bindDetailImageFallback(root);
-        }
-        root
-          .querySelectorAll(".detail-image-retry-small")
-          .forEach((item) => {
-            const selected = item === thumbnail;
-            item.classList.toggle("is-active", selected);
-            item.setAttribute("aria-pressed", String(selected));
-          });
-      }
       const addButton = event.target.closest(
         "[data-detail-add], [data-detail-buy]",
       );
@@ -412,30 +427,6 @@ export async function mountProductDetail() {
           showToast("Đã thêm sản phẩm vào giỏ hàng.");
         } catch (error) {
           showToast(error.message);
-        }
-        return;
-      }
-      const favorite = event.target.closest("[data-favorite]");
-      if (favorite) {
-        const favoriteId = favorite.dataset.favorite;
-        if (!favoriteSession) return requireFavoriteLogin();
-        const daChon = !favoriteProducts.has(favoriteId);
-        try {
-          await saveFavoriteState(favoriteId, daChon, favoriteSession);
-          daChon
-            ? favoriteProducts.add(favoriteId)
-            : favoriteProducts.delete(favoriteId);
-          favorite.classList.toggle("is-favorite", daChon);
-          favorite.setAttribute("aria-label", daChon ? "Bỏ yêu thích" : "Thêm vào yêu thích");
-          favorite.setAttribute("aria-pressed", String(daChon));
-          favorite.textContent = daChon ? "♥" : "♡";
-        } catch (error) {
-          if (error.status === 401) {
-            localStorage.removeItem("anh-nguyet-auth");
-            window.dispatchEvent(new CustomEvent("anh-nguyet-xac-thuc-cap-nhat", { detail: { user: null } }));
-            return requireFavoriteLogin();
-          }
-          showToast(error.message || "Không thể cập nhật danh sách yêu thích.");
         }
         return;
       }
@@ -479,7 +470,7 @@ export async function mountProductDetail() {
         const reviewId = form.dataset.reviewId;
         await apiRequest(`/products/${encodeURIComponent(id)}/reviews${reviewId ? `/${encodeURIComponent(reviewId)}` : ""}`, {
           method: reviewId ? "PUT" : "POST",
-          headers: { Authorization: `Bearer ${favoriteSession.token}` },
+          headers: { Authorization: `Bearer ${session.token}` },
           body: values,
         });
         status.textContent = "Đã gửi đánh giá. Đang cập nhật danh sách...";
@@ -487,6 +478,72 @@ export async function mountProductDetail() {
       } catch (error) {
         status.textContent = error.message || "Không thể gửi đánh giá.";
         submit.disabled = false;
+      }
+    });
+    const zoomDialog = document.createElement("dialog");
+    zoomDialog.className = "product-image-zoom-dialog";
+    zoomDialog.setAttribute("aria-label", "Ảnh sản phẩm phóng to");
+    zoomDialog.innerHTML = `
+      <button type="button" class="product-image-zoom-close" data-close-product-zoom aria-label="Đóng ảnh phóng to">×</button>
+      <button type="button" class="product-image-zoom-nav product-image-zoom-previous" data-zoom-previous aria-label="Ảnh trước" ${images.length < 2 ? "hidden" : ""}>‹</button>
+      <figure class="product-image-zoom-figure"><img data-zoom-image alt="Ảnh sản phẩm phóng to"><figcaption data-zoom-counter></figcaption></figure>
+      <button type="button" class="product-image-zoom-nav product-image-zoom-next" data-zoom-next aria-label="Ảnh tiếp theo" ${images.length < 2 ? "hidden" : ""}>›</button>`;
+    document.body.append(zoomDialog);
+    const showProductImage = (requestedIndex) => {
+      if (!images.length) return;
+      const index = ((Math.trunc(requestedIndex) % images.length) + images.length) % images.length;
+      selectedImageIndex = index;
+      const mainImage = root.querySelector("#detail-image");
+      if (mainImage) {
+        mainImage.src = images[index];
+        mainImage.alt = product.name;
+      }
+      root.querySelectorAll("[data-image-index]").forEach((button) => {
+        const selected = Number(button.dataset.imageIndex) === index;
+        button.classList.toggle("is-active", selected);
+        button.setAttribute("aria-pressed", String(selected));
+      });
+      if (zoomDialog.open) {
+        zoomDialog.querySelector("[data-zoom-image]").src = images[index];
+        zoomDialog.querySelector("[data-zoom-image]").alt = `${product.name} — ảnh ${index + 1}`;
+        zoomDialog.querySelector("[data-zoom-counter]").textContent = `${index + 1} / ${images.length}`;
+      }
+    };
+    const openProductZoom = (index) => {
+      if (!images.length) return;
+      showProductImage(index);
+      const zoomImage = zoomDialog.querySelector("[data-zoom-image]");
+      zoomImage.src = images[selectedImageIndex];
+      zoomImage.alt = `${product.name} — ảnh ${selectedImageIndex + 1}`;
+      zoomDialog.querySelector("[data-zoom-counter]").textContent = `${selectedImageIndex + 1} / ${images.length}`;
+      if (!zoomDialog.open) zoomDialog.showModal();
+    };
+    root.addEventListener("mouseover", (event) => {
+      const thumbnail = event.target.closest("[data-image-index]");
+      if (!thumbnail || !root.contains(thumbnail)) return;
+      if (event.relatedTarget && thumbnail.contains(event.relatedTarget)) return;
+      showProductImage(Number(thumbnail.dataset.imageIndex));
+    });
+    root.addEventListener("focusin", (event) => {
+      const thumbnail = event.target.closest("[data-image-index]");
+      if (thumbnail) showProductImage(Number(thumbnail.dataset.imageIndex));
+    });
+    zoomDialog.addEventListener("click", (event) => {
+      if (event.target === zoomDialog || event.target.closest("[data-close-product-zoom]")) {
+        zoomDialog.close();
+        return;
+      }
+      if (event.target.closest("[data-zoom-previous]")) showProductImage(selectedImageIndex - 1);
+      if (event.target.closest("[data-zoom-next]")) showProductImage(selectedImageIndex + 1);
+    });
+    document.addEventListener("keydown", (event) => {
+      if (!zoomDialog.open || images.length < 2) return;
+      if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        showProductImage(selectedImageIndex - 1);
+      } else if (event.key === "ArrowRight") {
+        event.preventDefault();
+        showProductImage(selectedImageIndex + 1);
       }
     });
     bindImageFallback(root);

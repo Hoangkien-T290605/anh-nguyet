@@ -9,9 +9,14 @@ const ADMIN_DESTINATIONS = new Set([
   "admin-customers.html",
   "admin-orders.html",
   "admin-reviews.html",
+  "admin-inventory.html",
+  "admin-shipping.html",
+  "admin-vouchers.html",
+  "admin-admins.html",
+  "admin-employees.html",
 ]);
 
-export function mountAdminLogin() {
+export function mountAdminLogin(expectedRole = "admin") {
   applyAdminTheme();
   const form = document.getElementById("admin-login-form");
   const status = document.getElementById("admin-login-status");
@@ -24,7 +29,9 @@ export function mountAdminLogin() {
   };
 
   if (new URLSearchParams(window.location.search).get("session") === "expired") {
-    showMessage("Phiên quản trị đã hết hạn. Vui lòng đăng nhập lại.");
+    showMessage(expectedRole === "employee"
+      ? "Phiên Nhân viên đã hết hạn. Vui lòng đăng nhập lại."
+      : "Phiên quản trị đã hết hạn. Vui lòng đăng nhập lại.");
   }
 
   form.addEventListener("submit", async (event) => {
@@ -52,8 +59,8 @@ export function mountAdminLogin() {
       const verified = await apiRequest("/auth/me", {
         headers: { Authorization: `Bearer ${login.token}` },
       });
-      if (verified.user?.role !== "admin") {
-        showMessage("Tài khoản này không được cấp quyền quản trị.");
+      if (verified.user?.role !== expectedRole) {
+        showMessage(expectedRole === "employee" ? "Tài khoản này không được cấp quyền Nhân viên." : "Tài khoản này không được cấp quyền quản trị.");
         return;
       }
 
@@ -66,10 +73,14 @@ export function mountAdminLogin() {
           detail: { user: verified.user },
         }),
       );
+      if (verified.user.must_change_password) {
+        window.location.assign(expectedRole === "employee" ? "employee-account.html" : "admin-admins.html");
+        return;
+      }
       const requested = new URLSearchParams(window.location.search).get("returnTo");
-      window.location.assign(
-        ADMIN_DESTINATIONS.has(requested) ? requested : "admin-dashboard.html",
-      );
+      const validEmployeeDestinations = new Set(["employee-dashboard.html", "employee-orders.html", "employee-inventory.html", "employee-customers.html", "employee-reviews.html", "employee-vouchers.html", "employee-account.html"]);
+      const validDestination = expectedRole === "employee" ? validEmployeeDestinations.has(requested) : ADMIN_DESTINATIONS.has(requested);
+      window.location.assign(validDestination ? requested : expectedRole === "employee" ? "employee-dashboard.html" : "admin-dashboard.html");
     } catch (error) {
       showMessage(error.message || "Không thể đăng nhập. Vui lòng thử lại.");
     } finally {

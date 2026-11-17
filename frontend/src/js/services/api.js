@@ -1,21 +1,6 @@
 // Chuẩn hóa địa chỉ gốc để mọi yêu cầu dùng chung một cấu hình API.
-const TEST_API_MODE_KEY = "anh-nguyet-api-environment";
-const isLocalFrontend = ["localhost", "127.0.0.1", "::1"].includes(
-  globalThis.location?.hostname,
-);
-let useTestApi = false;
-try {
-  useTestApi =
-    isLocalFrontend &&
-    globalThis.sessionStorage?.getItem(TEST_API_MODE_KEY) === "test";
-} catch {
-  useTestApi = false;
-}
-
 const API_ORIGIN = (
-  useTestApi
-    ? "http://127.0.0.1:5011"
-    : globalThis.ANH_NGUYET_CONFIG?.apiBaseUrl || "http://localhost:5000"
+  globalThis.ANH_NGUYET_CONFIG?.apiBaseUrl || "http://localhost:5000"
 ).replace(/\/+$/, "");
 
 export const API_BASE_URL = `${API_ORIGIN}/api`;
@@ -104,7 +89,12 @@ export async function apiRequest(path, options = {}) {
     result = await response.json();
   } catch {
     if (response.status === 401) clearExpiredSession(options);
-    const error = new Error("Backend trả về dữ liệu không hợp lệ.");
+    const error = new Error(
+      response.ok
+        ? "Backend trả về dữ liệu không hợp lệ."
+        : `Backend trả về phản hồi không phải JSON (HTTP ${response.status}).`,
+    );
+    error.status = response.status;
     if (response.status === 401) error.status = 401;
     throw error;
   }
@@ -125,5 +115,10 @@ export function getProductImageUrl(image) {
   if (/^https?:\/\//i.test(image)) return image;
   if (image.startsWith("index.html")) return image;
   if (image.startsWith("/uploads/")) return getApiAssetUrl(image);
+  if (image.startsWith("uploads/")) return getApiAssetUrl(`/${image}`);
+  const normalized = image.replace(/^\/+/, "");
+  if (normalized.startsWith("images/products/")) {
+    return normalized.split("/").map((part) => encodeURIComponent(part)).join("/");
+  }
   return `images/products/${encodeURIComponent(image)}`;
 }

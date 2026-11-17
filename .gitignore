@@ -18,6 +18,10 @@ pnpm-debug.log*
 
 # Editor and operating system files
 .vscode/
+!.vscode/
+.vscode/*
+!.vscode/tasks.json
+!.vscode/settings.json
 .DS_Store
 Thumbs.db
 
@@ -28,5 +32,7 @@ frontend/images/products/*
 
 # Database backups (contain private user data)
 database/anh_nguyet_full_backup.sql
+/database/backups/
 /database/backups/*.sql
 /backups/
+/server/.test-artifacts/

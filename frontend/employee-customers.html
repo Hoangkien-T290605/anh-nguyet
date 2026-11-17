@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#7041a6" />
+    <link rel="stylesheet" href="./site.css" />
+    <link rel="stylesheet" href="./admin.css" />
+    <title>Tra cứu khách hàng | Ánh Nguyệt</title>
+  </head>
+  <body data-admin-page="employee-customers">
+    <div id="admin-gate" class="admin-gate" role="status">Đang xác minh quyền quản trị...</div>
+    <div id="admin-app" class="admin-app" hidden>
+      <aside id="admin-sidebar" class="admin-sidebar"></aside>
+      <div class="admin-main-column">
+        <header id="admin-topbar" class="admin-topbar"></header>
+        <main id="admin-content" class="admin-content">
+          <section class="admin-page-heading">
+            <span>QUẢN LÝ TÀI KHOẢN</span>
+            <h1>Khách hàng</h1>
+            <p>Danh sách chỉ đọc từ API quản trị; thông tin xác thực không được trả về.</p>
+          </section>
+          <section class="admin-products-panel" aria-label="Danh sách khách hàng">
+            <div class="admin-customers-toolbar">
+              <label>Tìm khách hàng
+                <input type="search" data-customer-search maxlength="100" placeholder="Họ tên, email hoặc số điện thoại" autocomplete="off" />
+              </label>
+            </div>
+            <p class="admin-products-message" data-customer-message role="status" aria-live="polite">Đang tải khách hàng...</p>
+            <div class="admin-products-table-wrap" data-customer-table-wrap hidden>
+              <table class="admin-customers-table">
+                <thead><tr><th>Khách hàng</th><th>Email</th><th>Số điện thoại</th><th>Ngày đăng ký</th><th>Thao tác</th></tr></thead>
+                <tbody data-customer-rows></tbody>
+              </table>
+            </div>
+            <nav class="admin-customers-pagination" data-customer-pagination aria-label="Phân trang khách hàng" hidden></nav>
+          </section>
+        </main>
+      </div>
+    </div>
+
+    <dialog class="admin-customer-dialog" data-customer-dialog aria-labelledby="customer-dialog-title">
+      <section class="admin-customer-detail">
+        <header class="admin-customer-dialog-heading">
+          <div><span class="admin-eyebrow">HỒ SƠ KHÁCH HÀNG</span><h2 id="customer-dialog-title">Chi tiết khách hàng</h2></div>
+          <button class="admin-product-close" type="button" data-customer-close aria-label="Đóng chi tiết">×</button>
+        </header>
+        <div data-customer-detail-content aria-live="polite"><p>Chọn một khách hàng để xem chi tiết.</p></div>
+      </section>
+    </dialog>
+    <script src="./config.js"></script>
+    <script type="module" src="./src/js/admin/main.js"></script>
+  </body>
+</html>

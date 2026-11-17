@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#7041a6" />
+    <link rel="stylesheet" href="./site.css" />
+    <link rel="stylesheet" href="./admin.css" />
+    <title>Quản lý nhân viên | Ánh Nguyệt</title>
+  </head>
+  <body data-admin-page="employees">
+    <div id="admin-gate" class="admin-gate" role="status">Đang xác minh quyền quản trị...</div>
+    <div id="admin-app" class="admin-app" hidden>
+      <aside id="admin-sidebar" class="admin-sidebar"></aside>
+      <div class="admin-main-column">
+        <header id="admin-topbar" class="admin-topbar"></header>
+        <main id="admin-content" class="admin-content admin-operations-page">
+          <section class="admin-page-heading">
+            <span>BẢO MẬT TÀI KHOẢN</span>
+            <h1>Quản lý nhân viên</h1>
+            <p>Cấp quyền cho khách hàng hiện có hoặc gửi lời mời đăng ký qua email.</p>
+          </section>
+          <section class="admin-products-panel">
+            <div class="admin-operations-toolbar">
+              <label>Tìm Nhân viên<input type="search" data-employee-search placeholder="Tên, email hoặc số điện thoại" /></label>
+              <button class="admin-customer-view" type="button" data-employee-grant-open>Cấp quyền cho tài khoản có sẵn</button>
+              <button class="admin-primary-button" type="button" data-employee-invite-open>Mời email mới</button>
+            </div>
+            <p class="admin-products-message" data-employee-message role="status" aria-live="polite">Đang tải nhân viên...</p>
+            <div class="admin-products-table-wrap" data-employee-wrap hidden>
+              <table class="admin-products-table">
+                <thead><tr><th>Nhân viên</th><th>Email</th><th>Điện thoại</th><th>Trạng thái</th><th>Vai trò</th><th>Thao tác</th></tr></thead>
+                <tbody data-employee-rows></tbody>
+              </table>
+            </div>
+            <nav class="admin-products-pagination" data-employee-pagination hidden></nav>
+          </section>
+          <section class="admin-products-panel">
+            <div class="admin-operations-toolbar">
+              <h2>Lời mời email</h2>
+              <p class="admin-operation-note">Liên kết chỉ dùng một lần, hết hạn sau 48 giờ và không lưu token thô trong cơ sở dữ liệu.</p>
+            </div>
+            <p class="admin-products-message" data-invitation-message role="status" aria-live="polite">Đang tải lời mời...</p>
+            <div class="admin-products-table-wrap" data-invitation-wrap hidden>
+              <table class="admin-products-table">
+                <thead><tr><th>Email</th><th>Trạng thái</th><th>Gửi email</th><th>Ngày gửi</th><th>Hết hạn</th><th>Thao tác</th></tr></thead>
+                <tbody data-invitation-rows></tbody>
+              </table>
+            </div>
+          </section>
+          <section class="admin-products-panel">
+            <div class="admin-operations-toolbar">
+              <h2>Lịch sử phân quyền</h2>
+              <label>Tìm tài khoản<input type="search" data-role-history-search placeholder="Tên hoặc email" /></label>
+            </div>
+            <p class="admin-products-message" data-role-history-message role="status" aria-live="polite">Đang tải lịch sử...</p>
+            <div class="admin-products-table-wrap" data-role-history-wrap hidden>
+              <table class="admin-products-table">
+                <thead><tr><th>Tài khoản</th><th>Thao tác</th><th>Vai trò</th><th>Admin thực hiện</th><th>Thời điểm</th></tr></thead>
+                <tbody data-role-history-rows></tbody>
+              </table>
+            </div>
+          </section>
+        </main>
+      </div>
+    </div>
+    <dialog class="admin-operation-dialog" data-employee-invite-dialog>
+      <form data-employee-invite-form>
+        <h2>Mời email mới</h2>
+        <p class="admin-operation-note">Email chưa đăng ký sẽ nhận liên kết thiết lập tên và mật khẩu riêng.</p>
+        <label>Email<input name="email" type="email" maxlength="150" autocomplete="email" required /></label>
+        <p data-employee-invite-message class="admin-products-message" role="status" hidden></p>
+        <footer><button type="button" data-employee-invite-close>Đóng</button><button class="admin-primary-button" type="submit">Gửi lời mời</button></footer>
+      </form>
+    </dialog>
+    <dialog class="admin-operation-dialog" data-employee-grant-dialog>
+      <form data-employee-grant-lookup-form>
+        <h2>Cấp quyền cho tài khoản có sẵn</h2>
+        <p class="admin-operation-note">Email và mật khẩu hiện tại, lịch sử mua hàng cùng giỏ hàng sẽ được giữ nguyên.</p>
+        <label>Email đã đăng ký<input name="email" type="email" maxlength="150" autocomplete="email" required /></label>
+        <button class="admin-customer-view" type="submit">Tra cứu tài khoản</button>
+        <p data-employee-grant-message class="admin-products-message" role="status" hidden></p>
+        <footer><button type="button" data-employee-grant-close>Đóng</button><button class="admin-primary-button" type="button" data-employee-grant-submit disabled>Cấp quyền Nhân viên</button></footer>
+      </form>
+    </dialog>
+    <dialog class="admin-operation-dialog" data-employee-edit-dialog>
+      <form data-employee-edit-form>
+        <h2>Cập nhật hồ sơ Nhân viên</h2>
+        <input name="id" type="hidden" />
+        <label>Họ và tên<input name="full_name" maxlength="100" required /></label>
+        <label>Email<input name="email" type="email" readonly /></label>
+        <label>Số điện thoại<input name="phone" maxlength="20" /></label>
+        <p data-employee-edit-message class="admin-products-message" role="status" hidden></p>
+        <footer><button type="button" data-employee-edit-close>Hủy</button><button class="admin-primary-button" type="submit">Lưu</button></footer>
+      </form>
+    </dialog>
+    <dialog class="admin-operation-dialog" data-employee-reset-dialog>
+      <form data-employee-reset-form>
+        <h2>Đặt lại mật khẩu</h2>
+        <p data-employee-reset-name></p>
+        <label>Mật khẩu tạm thời mới<input name="temporary_password" type="password" minlength="12" maxlength="72" autocomplete="new-password" required /></label>
+        <p class="admin-operation-note">Chuyển mật khẩu qua kênh riêng an toàn. Nhân viên phải đổi mật khẩu khi đăng nhập.</p>
+        <p data-employee-reset-message class="admin-products-message" role="status" hidden></p>
+        <footer><button type="button" data-employee-reset-close>Hủy</button><button class="admin-primary-button" type="submit">Đặt lại</button></footer>
+      </form>
+    </dialog>
+    <script src="./config.js"></script>
+    <script type="module" src="./src/js/admin/main.js"></script>
+  </body>
+</html>

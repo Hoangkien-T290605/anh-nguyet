@@ -37,6 +37,8 @@ export async function mountAdminVouchers() {
   const search = document.querySelector("[data-voucher-search]");
   const status = document.querySelector("[data-voucher-status]");
   const type = document.querySelector("[data-voucher-type]");
+  const dateFrom = document.querySelector("[data-voucher-date-from]");
+  const dateTo = document.querySelector("[data-voucher-date-to]");
   const dialog = document.querySelector("[data-voucher-dialog]");
   const form = document.querySelector("[data-voucher-form]");
   const formMessage = document.querySelector("[data-voucher-form-message]");
@@ -72,9 +74,10 @@ export async function mountAdminVouchers() {
         <td>${escapeHTML(offer)}</td>
         <td>Tối thiểu ${escapeHTML(formatPrice(voucher.minimum_subtotal))}</td>
         <td>${escapeHTML(formatDate(voucher.starts_at))}<span class="admin-voucher-subtitle">đến ${escapeHTML(formatDate(voucher.ends_at))}</span></td>
-        <td>${Number(voucher.used_count) || 0} / ${Number(voucher.quantity_limit) || 0}</td>
+        <td>${Number(voucher.redeemed_count) || 0} đã dùng · ${Number(voucher.reserved_count) || 0} đang giữ / ${Number(voucher.quantity_limit) || 0} · còn ${Math.max(0, (Number(voucher.quantity_limit) || 0) - (Number(voucher.used_count) || 0))}</td>
+        <td>${voucher.per_customer_limit == null ? "Không giới hạn" : Number(voucher.per_customer_limit)}</td>
         <td><span class="admin-voucher-status is-${escapeHTML(voucher.status)}">${escapeHTML(STATUS_LABELS[voucher.status] || "Không xác định")}</span></td>
-        <td><div class="admin-voucher-row-actions"><button class="admin-customer-view" type="button" data-voucher-edit="${escapeHTML(voucher.id)}">Sửa</button><button class="admin-review-action" type="button" data-voucher-toggle="${escapeHTML(voucher.id)}" data-active="${isActive}" ${loading ? "disabled" : ""}>${isActive ? "Tạm ngừng" : "Kích hoạt"}</button></div></td>
+        <td><div class="admin-voucher-row-actions"><button class="admin-customer-view" type="button" data-voucher-details="${escapeHTML(voucher.id)}">Chi tiết</button><button class="admin-customer-view" type="button" data-voucher-edit="${escapeHTML(voucher.id)}">Sửa</button><button class="admin-review-action" type="button" data-voucher-toggle="${escapeHTML(voucher.id)}" data-active="${isActive}" ${loading ? "disabled" : ""}>${isActive ? "Tạm ngừng" : "Kích hoạt"}</button><button class="admin-review-action" type="button" data-voucher-delete="${escapeHTML(voucher.id)}" data-voucher-code="${escapeHTML(voucher.code)}" ${loading ? "disabled" : ""}>Xóa</button></div></td>
       </tr>`;
     }).join("");
     pagination.hidden = totalPages <= 1;
@@ -85,7 +88,7 @@ export async function mountAdminVouchers() {
     if (loading) return;
     loading = true;
     setMessage("Đang tải mã giảm giá...");
-    const query = new URLSearchParams({ page: String(page), limit: String(PAGE_SIZE), q: search.value.trim(), status: status.value, type: type.value });
+    const query = new URLSearchParams({ page: String(page), limit: String(PAGE_SIZE), q: search.value.trim(), status: status.value, type: type.value, date_from: dateFrom.value, date_to: dateTo.value });
     try {
       const result = await apiRequest(`/admin/vouchers?${query}`, { headers: sessionHeaders });
       if (!Array.isArray(result.data) || !result.pagination) throw new Error("Backend trả về danh sách voucher không hợp lệ.");
@@ -114,11 +117,13 @@ export async function mountAdminVouchers() {
     form.elements.id.value = voucher?.id || "";
     form.elements.code.value = voucher?.code || "";
     form.elements.campaign_name.value = voucher?.campaign_name || "";
+    form.elements.description.value = voucher?.description || "";
     form.elements.discount_type.value = voucher?.discount_type || "percentage";
     form.elements.discount_value.value = voucher?.discount_value ?? "";
     form.elements.minimum_subtotal.value = voucher?.minimum_subtotal ?? 0;
     form.elements.maximum_discount.value = voucher?.maximum_discount ?? "";
     form.elements.quantity_limit.value = voucher?.quantity_limit ?? "";
+    form.elements.per_customer_limit.value = voucher?.per_customer_limit ?? "";
     form.elements.starts_at.value = voucher ? toDateInput(voucher.starts_at) : "";
     form.elements.ends_at.value = voucher ? toDateInput(voucher.ends_at) : "";
     form.elements.is_active.checked = voucher ? Boolean(voucher.is_active) : true;
@@ -143,17 +148,61 @@ export async function mountAdminVouchers() {
   search.addEventListener("input", () => { clearTimeout(debounce); debounce = setTimeout(() => { page = 1; void load(); }, 250); });
   status.addEventListener("change", () => { page = 1; void load(); });
   type.addEventListener("change", () => { page = 1; void load(); });
+  for (const input of [dateFrom, dateTo]) input.addEventListener("change", () => {
+    if (dateFrom.value && dateTo.value && dateFrom.value > dateTo.value) {
+      setMessage("Ngày bắt đầu không thể sau ngày kết thúc.", true);
+      return;
+    }
+    page = 1;
+    void load();
+  });
   pagination.addEventListener("click", (event) => { const button = event.target.closest("[data-voucher-page]"); if (!button || button.disabled) return; page += Number(button.dataset.voucherPage); void load(); });
   rows.addEventListener("click", async (event) => {
+    const remove = event.target.closest("[data-voucher-delete]");
+    if (remove) {
+      if (loading) return;
+      const voucherCode = remove.dataset.voucherCode || "mã này";
+      if (!window.confirm(`Xóa voucher ${voucherCode}? Chỉ voucher chưa có lịch sử sử dụng mới được xóa; voucher có lịch sử sẽ được giữ lại.`)) return;
+      loading = true; render();
+      try {
+        const result = await apiRequest(`/admin/vouchers/${encodeURIComponent(remove.dataset.voucherDelete)}`, { method: "DELETE", headers: sessionHeaders });
+        if (!result.success) throw new Error("Backend chưa xác nhận xóa voucher.");
+        loading = false;
+        setMessage(result.message || "Đã xóa voucher.");
+        await load();
+      } catch (error) {
+        loading = false;
+        if (error.status === 401) { window.location.replace("admin-login.html?session=expired&returnTo=admin-vouchers.html"); return; }
+        setMessage(error.message || "Không thể xóa voucher.", true); render();
+      }
+      return;
+    }
+    const details = event.target.closest("[data-voucher-details]");
+    if (details) {
+      const detailDialog = document.querySelector("[data-voucher-details-dialog]");
+      const detailMessage = document.querySelector("[data-voucher-details-message]");
+      const detailContent = document.querySelector("[data-voucher-details-content]");
+      detailContent.replaceChildren(); detailMessage.textContent = "Đang tải chi tiết voucher..."; detailDialog.showModal();
+      try {
+        const result = await apiRequest(`/admin/vouchers/${encodeURIComponent(details.dataset.voucherDetails)}`, { headers: sessionHeaders });
+        const voucher = result.data?.voucher;
+        const redemptions = Array.isArray(result.data?.redemptions) ? result.data.redemptions : [];
+        const usageSummary = result.data?.usage_summary || {};
+        if (!voucher) throw new Error("Backend không trả thông tin voucher hợp lệ.");
+        detailMessage.textContent = `${STATUS_LABELS[voucher.status] || "Không xác định"} · ${Number(usageSummary.redeemed_count || 0)} đã dùng · ${Number(usageSummary.reserved_count || 0)} đang giữ · ${Number(usageSummary.released_count || 0)} đã hoàn lượt · giới hạn ${Number(voucher.quantity_limit)}.`;
+        detailContent.innerHTML = `<dl class="admin-voucher-detail-grid"><dt>Mã</dt><dd>${escapeHTML(voucher.code)}</dd><dt>Chương trình</dt><dd>${escapeHTML(voucher.campaign_name)}</dd><dt>Mô tả</dt><dd>${escapeHTML(voucher.description || "—")}</dd><dt>Giá trị đơn tối thiểu</dt><dd>${escapeHTML(formatPrice(voucher.minimum_subtotal))}</dd><dt>Giới hạn mỗi khách</dt><dd>${voucher.per_customer_limit == null ? "Không giới hạn" : Number(voucher.per_customer_limit)}</dd><dt>Thời gian</dt><dd>${escapeHTML(formatDate(voucher.starts_at))} – ${escapeHTML(formatDate(voucher.ends_at))}</dd></dl><h3>Đơn hàng sử dụng gần đây (tối đa 100)</h3>${redemptions.length ? `<div class="admin-products-table-wrap"><table class="admin-products-table"><thead><tr><th>Đơn hàng</th><th>Khách hàng</th><th>Trạng thái</th><th>Lượt voucher</th><th>Tổng đơn</th><th>Giảm giá</th><th>Thời gian</th></tr></thead><tbody>${redemptions.map((item) => `<tr><td>#${escapeHTML(item.order_id)}</td><td>${escapeHTML(item.customer_name || (item.customer_id == null ? "Khách vãng lai" : `Tài khoản #${item.customer_id}`))}</td><td>${escapeHTML(item.order_status || "—")}</td><td>${item.usage_status === "reserved" ? "Đang giữ" : item.usage_status === "released" ? "Đã hoàn lượt" : "Đã dùng"}</td><td>${escapeHTML(formatPrice(item.total_amount))}</td><td>${escapeHTML(formatPrice(item.discount_amount))}</td><td>${escapeHTML(formatDate(item.created_at))}</td></tr>`).join("")}</tbody></table></div>` : "<p>Chưa có lượt sử dụng.</p>"}`;
+      } catch (error) { detailMessage.textContent = error.message || "Không thể tải chi tiết voucher."; }
+      return;
+    }
     const edit = event.target.closest("[data-voucher-edit]");
     if (edit) { const voucher = vouchers.find((item) => String(item.id) === edit.dataset.voucherEdit); if (voucher) openForm(voucher); return; }
     const toggle = event.target.closest("[data-voucher-toggle]");
     if (!toggle || loading) return;
     const nextActive = toggle.dataset.active !== "true";
-    if (!window.confirm(`${nextActive ? "Kích hoạt" : "Tạm ngừng"} mã ${toggle.dataset.voucherId}? Lịch sử sử dụng sẽ được giữ nguyên.`)) return;
+    if (!window.confirm(`${nextActive ? "Kích hoạt" : "Tạm ngừng"} mã ${toggle.dataset.voucherToggle}? Lịch sử sử dụng sẽ được giữ nguyên.`)) return;
     loading = true; render();
     try {
-      const result = await apiRequest(`/admin/vouchers/${encodeURIComponent(toggle.dataset.voucherId)}/active`, { method: "PATCH", headers: sessionHeaders, body: JSON.stringify({ is_active: nextActive }) });
+      const result = await apiRequest(`/admin/vouchers/${encodeURIComponent(toggle.dataset.voucherToggle)}/active`, { method: "PATCH", headers: sessionHeaders, body: JSON.stringify({ is_active: nextActive }) });
       if (!result.success) throw new Error("Backend chưa xác nhận cập nhật trạng thái.");
       loading = false;
       setMessage(result.message || "Đã cập nhật trạng thái.");
@@ -164,6 +213,8 @@ export async function mountAdminVouchers() {
       setMessage(error.message || "Không thể cập nhật trạng thái.", true); render();
     }
   });
+
+  document.querySelector("[data-voucher-details-close]").addEventListener("click", () => document.querySelector("[data-voucher-details-dialog]").close());
 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -180,6 +231,7 @@ export async function mountAdminVouchers() {
     data.minimum_subtotal = Number(data.minimum_subtotal);
     data.maximum_discount = data.maximum_discount === "" ? null : Number(data.maximum_discount);
     data.quantity_limit = Number(data.quantity_limit);
+    data.per_customer_limit = data.per_customer_limit === "" ? null : Number(data.per_customer_limit);
     data.starts_at = startsAt.toISOString();
     data.ends_at = endsAt.toISOString();
     data.is_active = form.elements.is_active.checked;

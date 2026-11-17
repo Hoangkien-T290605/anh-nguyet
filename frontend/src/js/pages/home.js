@@ -1,8 +1,7 @@
-// Trang chủ tải danh mục và sản phẩm nổi bật từ Backend.
+// Trang chủ tải sản phẩm bán chạy, danh mục và dữ liệu tìm kiếm từ Backend.
 import { apiRequest, getProductImageUrl } from "../services/api.js";
 import { createProductSearchMatcher } from "../services/product-search.js";
 import { addToCart } from "../services/cart.js";
-import { loadFavoriteProducts, readFavoriteSession, requireFavoriteLogin, saveFavoriteState } from "../services/favorites.js";
 
 const heroImageUrl = "./assets/header-panel.png";
 const decorationUrl = "./assets/icon-decoration.png";
@@ -22,12 +21,16 @@ const categories = [
   { name: "Tất cả", icon: allIconUrl },
 ];
 
-let allProducts = [];
+let bestSellerProducts = [];
+let visibleProducts = [];
+let allProducts = null;
+let allProductsRequest = null;
 let selectedCategory = "Tất cả";
 let searchTerm = "";
 let toastTimer;
-const favoriteIds = new Set();
-let favoriteSession = null;
+let bestSellerOffset = 0;
+let bestSellerHasMore = false;
+let loadingMoreBestSellers = false;
 
 // Mã hóa dữ liệu hiển thị để giữ an toàn cấu trúc HTML.
 function escapeHTML(value = "") {
@@ -94,7 +97,6 @@ function createProductCard(product, index) {
         ${image ? `<img class="product-image" src="${escapeHTML(image)}" alt="${escapeHTML(product.name)}" loading="lazy" data-product-image />` : ""}
         <span class="product-placeholder" aria-hidden="true" ${image ? "hidden" : ""}>${categorySymbol(product.category)}</span>
         <span class="product-brand">ÁNH NGUYỆT</span>
-        <button class="favorite-button ${favoriteIds.has(id) ? "is-favorite" : ""}" type="button" data-favorite="${escapeHTML(id)}" aria-label="${favoriteIds.has(id) ? "Bỏ yêu thích" : "Thêm vào yêu thích"}" aria-pressed="${favoriteIds.has(id)}">${favoriteIds.has(id) ? "♥" : "♡"}</button>
       </div>
       <div class="product-info">
         <h3>${escapeHTML(product.name)}</h3>
@@ -110,8 +112,11 @@ function createProductCard(product, index) {
 function renderProducts() {
   const grid = document.getElementById("product-grid");
   const status = document.getElementById("product-status");
-  const matchesName = createProductSearchMatcher(allProducts, searchTerm);
-  const visible = allProducts.filter((product) => {
+  const sourceProducts = searchTerm.trim() && allProducts
+    ? allProducts
+    : bestSellerProducts;
+  const matchesName = createProductSearchMatcher(sourceProducts, searchTerm);
+  const visible = sourceProducts.filter((product) => {
     return (
       (selectedCategory === "Tất cả" || product.category === selectedCategory) &&
       matchesName(product) &&
@@ -119,19 +124,23 @@ function renderProducts() {
       product.active !== 0
     );
   });
+  visibleProducts = visible;
 
   if (!visible.length) {
     grid.hidden = true;
     status.hidden = false;
-    status.textContent = allProducts.length
+    status.textContent = searchTerm.trim()
       ? "Không tìm thấy sản phẩm phù hợp."
-      : "Chưa có sản phẩm để hiển thị.";
+      : bestSellerProducts.length
+        ? "Không có sản phẩm bán chạy phù hợp với danh mục đã chọn."
+        : "Chưa có sản phẩm bán ra từ đơn hàng hoàn thành.";
+    capNhatNutTaiThem();
     return;
   }
 
   status.hidden = true;
   grid.hidden = false;
-  grid.innerHTML = visible.map(createProductCard).join("");
+  grid.innerHTML = visible.map((product, index) => createProductCard(product, index)).join("");
 
   grid.querySelectorAll("[data-product-image]").forEach((image) => {
     image.addEventListener(
@@ -146,16 +155,110 @@ function renderProducts() {
       { once: true },
     );
   });
+  capNhatNutTaiThem();
 }
 
-// Gắn thao tác mở chi tiết, yêu thích và thêm vào giỏ hàng.
+function capNhatNutTaiThem() {
+  const button = document.querySelector("[data-best-sellers-more]");
+  if (!button) return;
+  button.hidden = Boolean(searchTerm.trim()) || !bestSellerHasMore;
+  button.disabled = loadingMoreBestSellers;
+  button.innerHTML = loadingMoreBestSellers
+    ? 'Đang tải... <span aria-hidden="true">⌛</span>'
+    : 'Xem tất cả <span aria-hidden="true">→</span>';
+}
+
+async function loadAllProductsForSearch() {
+  if (Array.isArray(allProducts)) return allProducts;
+  if (!allProductsRequest) {
+    allProductsRequest = apiRequest("/products", {
+      signal: AbortSignal.timeout(12000),
+    }).then((result) => {
+      if (!Array.isArray(result.data)) {
+        throw new Error("Dữ liệu sản phẩm từ máy chủ không hợp lệ.");
+      }
+      allProducts = result.data.filter(
+        (product) => product.active !== false && product.active !== 0,
+      );
+      return allProducts;
+    }).catch((error) => {
+      allProductsRequest = null;
+      throw error;
+    });
+  }
+  return allProductsRequest;
+}
+
+async function handleHomeSearch(value) {
+  searchTerm = value;
+  if (searchTerm.trim() && !Array.isArray(allProducts)) {
+    const status = document.getElementById("product-status");
+    status.hidden = false;
+    status.removeAttribute("role");
+    status.textContent = "Đang tìm sản phẩm...";
+    try {
+      await loadAllProductsForSearch();
+    } catch (error) {
+      status.hidden = false;
+      status.setAttribute("role", "alert");
+      status.textContent = `${error.message} Vui lòng thử lại.`;
+      document.getElementById("product-grid").hidden = true;
+      return;
+    }
+  }
+  renderProducts();
+}
+
+async function loadMoreBestSellers() {
+  if (loadingMoreBestSellers || !bestSellerHasMore || searchTerm.trim()) return;
+  const button = document.querySelector("[data-best-sellers-more]");
+  loadingMoreBestSellers = true;
+  capNhatNutTaiThem();
+  try {
+    const result = await apiRequest(
+      `/products/best-sellers?offset=${bestSellerOffset}`,
+      { signal: AbortSignal.timeout(12000) },
+    );
+    if (!Array.isArray(result.data)) {
+      throw new Error("Máy chủ trả về danh sách sản phẩm bán chạy không hợp lệ.");
+    }
+    const knownIds = new Set(
+      bestSellerProducts.map((product) => String(product.id ?? product._id)),
+    );
+    const nextProducts = result.data.filter((product) => {
+      const id = String(product.id ?? product._id ?? "");
+      if (!id || knownIds.has(id)) return false;
+      knownIds.add(id);
+      return true;
+    });
+    bestSellerProducts = [...bestSellerProducts, ...nextProducts];
+    bestSellerOffset = Number(result.offset) + result.data.length;
+    bestSellerHasMore = Boolean(result.hasMore);
+    if (!result.data.length) bestSellerHasMore = false;
+    renderProducts();
+    if (!bestSellerHasMore && button) {
+      button.hidden = true;
+      button.setAttribute("aria-label", "Đã hiển thị hết sản phẩm bán chạy");
+    }
+  } catch (error) {
+    const status = document.getElementById("product-status");
+    status.hidden = false;
+    status.setAttribute("role", "alert");
+    status.textContent = `${error.message} Không thể tải thêm sản phẩm lúc này.`;
+  } finally {
+    loadingMoreBestSellers = false;
+    capNhatNutTaiThem();
+  }
+}
+
+// Gắn thao tác mở chi tiết và thêm sản phẩm vào giỏ hàng.
 function bindProductActions() {
   const grid = document.getElementById("product-grid");
-  grid.addEventListener("click", async (event) => {
+  grid.addEventListener("click", (event) => {
     const addButton = event.target.closest("[data-add-cart]");
     if (addButton) {
       event.stopPropagation();
-      const product = allProducts.find(
+      const product = visibleProducts.find(
         (item) => String(item._id ?? item.id) === addButton.dataset.addCart,
       );
       if (!product) return;
@@ -164,31 +267,6 @@ function bindProductActions() {
         showToast(`Đã thêm “${product.name}” vào giỏ hàng.`);
       } catch (error) {
         showToast(error.message);
-      }
-      return;
-    }
-
-    const favorite = event.target.closest("[data-favorite]");
-    if (favorite) {
-      event.stopPropagation();
-      const id = favorite.dataset.favorite;
-      if (!favoriteSession) return requireFavoriteLogin();
-      const willFavorite = !favoriteIds.has(id);
-      try {
-        await saveFavoriteState(id, willFavorite, favoriteSession);
-        willFavorite ? favoriteIds.add(id) : favoriteIds.delete(id);
-        favorite.classList.toggle("is-favorite", willFavorite);
-        favorite.setAttribute("aria-label", willFavorite ? "Bỏ yêu thích" : "Thêm vào yêu thích");
-        favorite.setAttribute("aria-pressed", String(willFavorite));
-        favorite.textContent = willFavorite ? "♥" : "♡";
-        showToast(willFavorite ? "Đã thêm sản phẩm vào danh sách yêu thích." : "Đã bỏ sản phẩm khỏi danh sách yêu thích.");
-      } catch (error) {
-        if (error.status === 401) {
-          localStorage.removeItem("anh-nguyet-auth");
-          window.dispatchEvent(new CustomEvent("anh-nguyet-xac-thuc-cap-nhat", { detail: { user: null } }));
-          return requireFavoriteLogin();
-        }
-        showToast(error.message || "Không thể cập nhật danh sách yêu thích.");
       }
       return;
     }
@@ -210,21 +288,6 @@ function bindProductActions() {
 
 // Tải dữ liệu trang chủ và khởi tạo các khu vực tương tác.
 export async function mountHome() {
-  favoriteSession = readFavoriteSession();
-  favoriteIds.clear();
-  if (favoriteSession) {
-    try {
-      (await loadFavoriteProducts(favoriteSession)).forEach((product) =>
-        favoriteIds.add(String(product.id ?? product._id)),
-      );
-    } catch (error) {
-      if (error.status === 401) {
-        localStorage.removeItem("anh-nguyet-auth");
-        favoriteSession = null;
-        window.dispatchEvent(new CustomEvent("anh-nguyet-xac-thuc-cap-nhat", { detail: { user: null } }));
-      }
-    }
-  }
   document.querySelector("[data-hero]").src = heroImageUrl;
   document.querySelectorAll("[data-decoration]").forEach((image) => {
     image.src = decorationUrl;
@@ -247,16 +310,22 @@ export async function mountHome() {
 
   document
     .querySelector("[data-search]")
-    ?.addEventListener("input", (event) => {
-      searchTerm = event.target.value;
-      renderProducts();
-    });
+    ?.addEventListener("input", (event) => void handleHomeSearch(event.target.value));
+
+  document
+    .querySelector("[data-best-sellers-more]")
+    ?.addEventListener("click", loadMoreBestSellers);
 
   try {
-    const result = await apiRequest("/products", {
+    const result = await apiRequest("/products/best-sellers?offset=0", {
       signal: AbortSignal.timeout(12000),
     });
-    allProducts = Array.isArray(result.data) ? result.data : [];
+    if (!Array.isArray(result.data)) {
+      throw new Error("Máy chủ trả về danh sách sản phẩm bán chạy không hợp lệ.");
+    }
+    bestSellerProducts = result.data;
+    bestSellerOffset = Number(result.offset) + result.data.length;
+    bestSellerHasMore = Boolean(result.hasMore);
     renderProducts();
   } catch (error) {
     const status = document.getElementById("product-status");
@@ -264,5 +333,6 @@ export async function mountHome() {
     status.setAttribute("role", "alert");
     status.textContent = `${error.message} Vui lòng kiểm tra backend và kết nối mạng.`;
     document.getElementById("product-grid").hidden = true;
+    capNhatNutTaiThem();
   }
 }

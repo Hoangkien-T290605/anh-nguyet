@@ -1,0 +1,44 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Ánh Nguyệt: Khởi chạy Backend",
+      "type": "process",
+      "command": "powershell.exe",
+      "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}\\server\\start-workspace-backend.ps1"],
+      "options": {
+        "cwd": "${workspaceFolder}/server",
+        "env": {
+          "DB_NAME": "anh_nguyet",
+          "PORT": "5000"
+        }
+      },
+      "isBackground": true,
+      "problemMatcher": [
+        {
+          "owner": "anhnguyet-backend",
+          "pattern": {
+            "regexp": "^(?!)((?:.*))((?:.*))$",
+            "file": 1,
+            "message": 2
+          },
+          "background": {
+            "activeOnStart": true,
+            "beginsPattern": "^BACKEND_STARTING database=anh_nguyet port=5000$",
+            "endsPattern": "^(BACKEND_READY database=anh_nguyet port=5000 products=[0-9]+|Không thể khởi động backend:|Không thể mở Backend tại cổng 5000:|Backend chưa sẵn sàng:)"
+          }
+        }
+      ],
+      "presentation": {
+        "reveal": "always",
+        "focus": false,
+        "panel": "dedicated",
+        "showReuseMessage": false
+      },
+      "runOptions": {
+        "runOn": "folderOpen",
+        "instanceLimit": 1
+      }
+    }
+  ]
+}

@@ -2,7 +2,6 @@
 import { apiRequest } from "../services/api.js";
 import { createProductSearchMatcher } from "../services/product-search.js";
 import { addToCart } from "../services/cart.js";
-import { loadFavoriteProducts, readFavoriteSession, requireFavoriteLogin, saveFavoriteState } from "../services/favorites.js";
 import {
   bindImageFallback,
   escapeHTML,
@@ -122,20 +121,6 @@ export async function mountProducts() {
     query: url.searchParams.get("q") || "",
     sort: "default",
   };
-  const favorites = new Set();
-  const favoriteSession = readFavoriteSession();
-  if (favoriteSession) {
-    try {
-      (await loadFavoriteProducts(favoriteSession)).forEach((item) =>
-        favorites.add(String(item.id ?? item._id)),
-      );
-    } catch (error) {
-      if (error.status === 401) {
-        localStorage.removeItem("anh-nguyet-auth");
-        window.dispatchEvent(new CustomEvent("anh-nguyet-xac-thuc-cap-nhat", { detail: { user: null } }));
-      }
-    }
-  }
   document.querySelector(".products-page-heading-decoration img").src = decorationUrl;
   search.value = state.query;
   headerSearch.value = state.query;
@@ -149,7 +134,7 @@ export async function mountProducts() {
     empty.hidden = visible.length > 0;
     grid.hidden = visible.length === 0;
     grid.innerHTML = visible
-      .map((item, index) => createProductCard(item, index, favorites))
+      .map((item, index) => createProductCard(item, index))
       .join("");
     bindImageFallback(grid);
     categoriesNode
@@ -281,7 +266,7 @@ export async function mountProducts() {
   document
     .getElementById("reset-empty-filter")
     .addEventListener("click", datLaiBoLoc);
-  grid.addEventListener("click", async (event) => {
+  grid.addEventListener("click", (event) => {
     const button = event.target.closest("[data-add-cart]");
     if (button) {
       event.stopPropagation();
@@ -301,28 +286,6 @@ export async function mountProducts() {
         const toast = document.getElementById("page-toast-notification");
         toast.textContent = error.message;
         toast.hidden = false;
-      }
-      return;
-    }
-    const favorite = event.target.closest("[data-favorite]");
-    if (favorite) {
-      event.stopPropagation();
-      const id = favorite.dataset.favorite;
-      if (!favoriteSession) return requireFavoriteLogin();
-      const willFavorite = !favorites.has(id);
-      try {
-        await saveFavoriteState(id, willFavorite, favoriteSession);
-        willFavorite ? favorites.add(id) : favorites.delete(id);
-        hienThiDanhSachSanPham();
-      } catch (error) {
-        if (error.status === 401) {
-          localStorage.removeItem("anh-nguyet-auth");
-          window.dispatchEvent(new CustomEvent("anh-nguyet-xac-thuc-cap-nhat", { detail: { user: null } }));
-          return requireFavoriteLogin();
-        }
-        const thongBao = document.getElementById("page-toast-notification");
-        thongBao.textContent = error.message || "Không thể cập nhật danh sách yêu thích.";
-        thongBao.hidden = false;
       }
       return;
     }

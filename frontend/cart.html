@@ -25,11 +25,18 @@
             </section>
             <p id="cart-status" role="status" aria-live="polite" hidden></p>
             <section class="cart-empty" id="cart-empty" hidden>
-              <div class="cart-empty-icon">🛒</div>
+              <div class="cart-empty-icon" aria-hidden="true">
+                <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M7 10h4l4.2 20.1a4 4 0 0 0 3.9 3.2h16.1a4 4 0 0 0 3.9-3.1L42 17H13" />
+                  <path d="M19 22h16M20 27h14" />
+                  <circle cx="20" cy="39" r="2.2" />
+                  <circle cx="35" cy="39" r="2.2" />
+                  <path class="cart-empty-icon-moon" d="M34.8 5.5a6.8 6.8 0 1 0 7.7 8.8 7.2 7.2 0 0 1-7.7-8.8Z" />
+                </svg>
+              </div>
               <h2>Giỏ hàng đang trống</h2>
               <p>
-                Bạn chưa có sản phẩm nào trong giỏ hàng. Hãy khám phá các sản
-                phẩm từ Ánh Nguyệt nhé!
+                Những món ngon bạn yêu thích vẫn đang chờ được khám phá.
               </p>
               <a class="cart-continue-button" href="products.html"
                 >KHÁM PHÁ SẢN PHẨM</a

@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#7041a6" />
+    <link rel="stylesheet" href="./site.css" />
+    <link rel="stylesheet" href="./admin.css" />
+    <title>Cấu hình vận chuyển | Ánh Nguyệt</title>
+  </head>
+  <body data-admin-page="shipping">
+    <div id="admin-gate" class="admin-gate" role="status">Đang xác minh quyền quản trị...</div>
+    <div id="admin-app" class="admin-app" hidden>
+      <aside id="admin-sidebar" class="admin-sidebar"></aside>
+      <div class="admin-main-column">
+        <header id="admin-topbar" class="admin-topbar"></header>
+        <main id="admin-content" class="admin-content admin-operations-page">
+          <section class="admin-page-heading">
+            <span>VẬN CHUYỂN</span>
+            <h1>Cấu hình vận chuyển</h1>
+            <p>Quản lý khu vực và mức phí COD áp dụng tại Checkout.</p>
+          </section>
+          <section class="admin-operations-card admin-shipping-page">
+            <p data-shipping-message role="status" aria-live="polite">Đang tải cấu hình...</p>
+            <form class="admin-shipping-create" data-shipping-create hidden>
+              <h2>Thêm khu vực</h2>
+              <div>
+                <label>Mã khu vực<input name="region_code" maxlength="32" pattern="[A-Z0-9][A-Z0-9_-]{2,31}" placeholder="Ví dụ: NOI_THANH" required /></label>
+                <label>Tên khu vực<input name="region_name" maxlength="100" placeholder="Tên khu vực" required /></label>
+                <label>Phí vận chuyển (đồng)<input name="fee" type="number" min="0" max="9999999999.99" step="0.01" placeholder="Chưa cấu hình" /></label>
+              </div>
+              <label class="admin-shipping-active"><input name="is_active" type="checkbox" /> Kích hoạt sau khi tạo (chỉ khi đã nhập phí chính thức)</label>
+              <button class="admin-primary-button" type="submit">Thêm khu vực</button>
+            </form>
+            <div class="admin-shipping-regions" data-shipping-regions aria-live="polite"></div>
+            <p class="admin-operation-note">Chỉ kích hoạt khu vực khi phí vận chuyển chính thức đã được xác nhận. Checkout chỉ dùng các khu vực đang hoạt động và có phí hợp lệ.</p>
+          </section>
+        </main>
+      </div>
+    </div>
+    <script src="./config.js"></script>
+    <script type="module" src="./src/js/admin/main.js"></script>
+  </body>
+</html>

@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="referrer" content="no-referrer" />
+    <meta name="theme-color" content="#7041a6" />
+    <link rel="stylesheet" href="./site.css" />
+    <link rel="stylesheet" href="./admin.css" />
+    <title>Chấp nhận lời mời Nhân viên | Ánh Nguyệt</title>
+  </head>
+  <body data-admin-page="employee-invite">
+    <main class="admin-login-page">
+      <section class="admin-login-card" aria-labelledby="employee-invite-heading">
+        <a class="admin-login-logo" href="index.html" aria-label="Ánh Nguyệt - Trang chủ">
+          <img src="./assets/logo-anh-nguyet.png" alt="Logo Ánh Nguyệt" />
+        </a>
+        <p class="admin-eyebrow">LỜI MỜI NHÂN VIÊN</p>
+        <h1 id="employee-invite-heading">Tạo tài khoản Nhân viên</h1>
+        <p class="admin-login-description">Thiết lập hồ sơ và mật khẩu riêng để chấp nhận lời mời.</p>
+        <p data-employee-invite-status class="admin-message" role="status" aria-live="polite">Đang xác minh lời mời...</p>
+        <form data-employee-invite-form class="admin-login-form" hidden>
+          <label for="employee-invite-email">Email được mời</label>
+          <input id="employee-invite-email" name="email" type="email" readonly />
+          <label for="employee-invite-name">Họ và tên</label>
+          <input id="employee-invite-name" name="full_name" maxlength="100" autocomplete="name" required />
+          <label for="employee-invite-phone">Số điện thoại (không bắt buộc)</label>
+          <input id="employee-invite-phone" name="phone" maxlength="20" autocomplete="tel" />
+          <label for="employee-invite-password">Mật khẩu mới</label>
+          <input id="employee-invite-password" name="password" type="password" minlength="12" maxlength="72" autocomplete="new-password" required />
+          <label for="employee-invite-confirm">Nhập lại mật khẩu</label>
+          <input id="employee-invite-confirm" name="confirm_password" type="password" minlength="12" maxlength="72" autocomplete="new-password" required />
+          <button class="admin-primary-button" type="submit">Chấp nhận lời mời</button>
+        </form>
+        <a class="admin-back-link" href="index.html">← Quay về cửa hàng</a>
+      </section>
+    </main>
+    <script src="./config.js"></script>
+    <script type="module" src="./src/js/pages/employee-invite.js"></script>
+  </body>
+</html>

@@ -3,6 +3,8 @@ import { apiRequest, getProductImageUrl } from "../services/api.js";
 import { escapeHTML } from "../components/product-card.js";
 
 const AUTH_KEY = "anh-nguyet-auth";
+const employeePortal = window.location.pathname.split("/").pop().startsWith("employee-");
+function redirectToPortalLogin(expired = false) { const returnTo = window.location.pathname.split("/").pop(); window.location.replace((employeePortal ? "employee-login" : "admin-login") + ".html?" + (expired ? "session=expired&" : "") + "returnTo=" + encodeURIComponent(returnTo)); }
 const PAGE_SIZE = 10;
 const STATUSES = [
   ["pending_confirmation", "Chờ xác nhận"],
@@ -13,6 +15,14 @@ const STATUSES = [
   ["cancelled", "Đã hủy"],
 ];
 const STATUS_LABELS = new Map(STATUSES);
+const STATUS_TRANSITIONS = {
+  pending_confirmation: ["confirmed", "cancelled"],
+  confirmed: ["preparing", "cancelled"],
+  preparing: ["shipping", "cancelled"],
+  shipping: ["completed"],
+  completed: [],
+  cancelled: [],
+};
 
 function readAuthSession() {
   try {
@@ -53,6 +63,15 @@ function normalizeText(value) {
     .trim();
 }
 
+function localDateKey(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 function isGuestOrder(order) {
   return order.customer_type === "guest" || order.customer_id === null;
 }
@@ -61,12 +80,14 @@ export async function mountAdminOrders() {
   const root = document.getElementById("admin-orders-goc");
   const searchInput = document.querySelector("[data-admin-order-search]");
   const statusFilter = document.querySelector("[data-admin-order-filter]");
+  const fromDateFilter = document.querySelector("[data-admin-order-from]");
+  const toDateFilter = document.querySelector("[data-admin-order-to]");
   const feedback = document.querySelector("[data-admin-orders-feedback]");
   const pagination = document.querySelector("[data-admin-orders-pagination]");
   const auth = readAuthSession();
 
   if (!auth) {
-    window.location.replace("admin-login.html?returnTo=admin-orders.html");
+    redirectToPortalLogin();
     return;
   }
 
@@ -90,17 +111,23 @@ export async function mountAdminOrders() {
   function filteredOrders() {
     const query = normalizeText(searchInput.value);
     const selectedStatus = statusFilter.value;
+    const fromDate = fromDateFilter.value;
+    const toDate = toDateFilter.value;
     return orders.filter((order) => {
       const matchesStatus = selectedStatus === "all" || order.status === selectedStatus;
+      const orderDate = localDateKey(order.created_at);
+      const matchesDate = (!fromDate || orderDate >= fromDate) && (!toDate || orderDate <= toDate);
       const searchable = [
         order.id,
+        order.customer_name,
+        order.customer_email,
         order.recipient_name,
         order.recipient_phone,
         order.shipping_address,
         isGuestOrder(order) ? "khach vang lai" : `tai khoan ${order.customer_id}`,
         ...(Array.isArray(order.items) ? order.items.map((item) => item.product_name) : []),
       ].join(" ");
-      return matchesStatus && (!query || normalizeText(searchable).includes(query));
+      return matchesStatus && matchesDate && (!query || normalizeText(searchable).includes(query));
     });
   }
 
@@ -177,11 +204,13 @@ export async function mountAdminOrders() {
       const statusLabel = STATUS_LABELS.get(order.status) || "Trạng thái không xác định";
       const customer = isGuestOrder(order)
         ? "Khách vãng lai"
-        : `Tài khoản #${escapeHTML(order.customer_id)}`;
+        : `${escapeHTML(order.customer_name || `Tài khoản #${order.customer_id}`)}${order.customer_email ? ` · ${escapeHTML(order.customer_email)}` : ""}`;
       const shippingFee = order.shipping_fee === null || order.shipping_fee === undefined
         ? "Chưa cấu hình"
         : formatCurrency(order.shipping_fee);
-      const statusOptions = STATUSES.map(([value, label]) => `<option value="${value}" ${status === value ? "selected" : ""}>${label}</option>`).join("");
+      const allowedStatuses = [order.status, ...(STATUS_TRANSITIONS[order.status] || [])];
+      const statusOptions = STATUSES.filter(([value]) => allowedStatuses.includes(value)).map(([value, label]) => `<option value="${value}" ${status === value ? "selected" : ""}>${label}</option>`).join("");
+      const discountAmount = Number(order.discount_amount) || 0;
       return `<article class="admin-orders-card">
         <div class="admin-orders-heading"><div><span class="account-order-label">MÃ ĐƠN</span><strong>#${escapeHTML(id)}</strong></div><span class="account-order-status">${customer}</span></div>
         <div class="admin-orders-grid">
@@ -193,7 +222,7 @@ export async function mountAdminOrders() {
           <div><span>Thanh toán</span><strong>${escapeHTML(order.payment_status || "—")}</strong></div>
         </div>
         <p class="admin-orders-address-detail"><strong>Địa chỉ nhận:</strong> ${escapeHTML(order.shipping_address || "—")}</p>
-        <div class="admin-order-totals"><span>Tạm tính <strong>${formatCurrency(order.subtotal)}</strong></span><span>Phí vận chuyển <strong>${shippingFee}</strong></span><span>Tổng đơn <strong>${formatCurrency(order.total_amount)}</strong></span></div>
+        <div class="admin-order-totals"><span>Tạm tính <strong>${formatCurrency(order.subtotal)}</strong></span>${discountAmount > 0 ? `<span>Voucher ${escapeHTML(order.voucher_code || "")} <strong>−${formatCurrency(discountAmount)}</strong></span>` : ""}<span>Phí vận chuyển <strong>${shippingFee}</strong></span><span>Tổng đơn <strong>${formatCurrency(order.total_amount)}</strong></span></div>
         <details class="admin-order-details"><summary>Chi tiết ${Array.isArray(order.items) ? order.items.length : 0} sản phẩm</summary>${renderItems(order.items)}</details>
         ${updateErrors.has(id) ? `<p class="admin-order-update-error" role="alert">${escapeHTML(updateErrors.get(id))}</p>` : ""}
         <div class="admin-orders-actions"><label>Trạng thái mới<select data-order-status="${escapeHTML(id)}">${statusOptions}</select></label><button class="account-primary-button" type="button" data-save-order-status="${escapeHTML(id)}" ${saving.has(id) ? "disabled" : ""}>${saving.has(id) ? "Đang lưu..." : "Cập nhật trạng thái"}</button></div>
@@ -229,7 +258,7 @@ export async function mountAdminOrders() {
       currentPage = 1;
     } catch (requestError) {
       if (requestError.status === 401) {
-        window.location.replace("admin-login.html?session=expired&returnTo=admin-orders.html");
+        redirectToPortalLogin(true);
         return;
       }
       loadError = requestError.message || "Không thể tải danh sách đơn hàng.";
@@ -247,6 +276,16 @@ export async function mountAdminOrders() {
     currentPage = 1;
     renderOrders();
   });
+  for (const dateFilter of [fromDateFilter, toDateFilter]) {
+    dateFilter.addEventListener("change", () => {
+      if (fromDateFilter.value && toDateFilter.value && fromDateFilter.value > toDateFilter.value) {
+        showFeedback("Ngày bắt đầu không thể sau ngày kết thúc.", true);
+        return;
+      }
+      currentPage = 1;
+      renderOrders();
+    });
+  }
   root.addEventListener("change", (event) => {
     const select = event.target.closest("[data-order-status]");
     if (select) pendingStatuses.set(select.dataset.orderStatus, select.value);
@@ -292,13 +331,13 @@ export async function mountAdminOrders() {
       if (!result.data || String(result.data.id) !== id) {
         throw new Error("Máy chủ chưa xác nhận trạng thái đơn hàng.");
       }
-      orders = orders.map((item) => String(item.id) === id ? result.data : item);
+      orders = orders.map((item) => String(item.id) === id ? { ...item, ...result.data } : item);
       pendingStatuses.delete(id);
       updateMessage = `Đã cập nhật trạng thái đơn #${id}.`;
       updateError = false;
     } catch (requestError) {
       if (requestError.status === 401) {
-        window.location.replace("admin-login.html?session=expired&returnTo=admin-orders.html");
+        redirectToPortalLogin(true);
         return;
       }
       updateErrors.set(id, requestError.message || "Không thể cập nhật trạng thái đơn hàng.");

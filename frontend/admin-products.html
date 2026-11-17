@@ -69,21 +69,59 @@
           <label>Giá bán (đ)
             <input name="price" type="number" min="0" step="0.01" required />
           </label>
-          <label>Tồn kho
-            <input name="stock" type="number" min="0" step="1" required />
+          <label>Tồn kho (chỉ xem; điều chỉnh tại Quản lý tồn kho)
+            <input name="stock" type="number" min="0" step="1" readonly />
           </label>
-          <label class="admin-product-field-wide">Mô tả
+          <label class="admin-product-field-wide">Mô tả chi tiết
             <textarea name="description" rows="4"></textarea>
           </label>
-          <label class="admin-product-field-wide">Ảnh hiện tại — tên tệp hoặc URL
-            <input name="image" type="text" maxlength="2048" placeholder="ten-anh.png hoặc https://..." autocomplete="off" />
+          <fieldset class="admin-product-field-wide admin-product-details-fields">
+            <legend>Thông tin chi tiết (để trống nếu không áp dụng)</legend>
+            <p class="admin-product-gallery-note">Thông tin được lưu cùng sản phẩm. Chỉ nhập nội dung đã được xác nhận; có thể để trống trường chưa có dữ liệu.</p>
+            <label>Mô tả ngắn<textarea name="detail_short_description" rows="3" maxlength="2000" data-product-detail-key="short_description"></textarea></label>
+            <label>Thành phần<textarea name="detail_ingredients" rows="3" maxlength="2000" data-product-detail-key="ingredients"></textarea></label>
+            <label>Xuất xứ<textarea name="detail_origin" rows="3" maxlength="2000" data-product-detail-key="origin"></textarea></label>
+            <label>Nơi sản xuất<input name="detail_manufacturer" maxlength="2000" data-product-detail-key="manufacturer" /></label>
+            <label>Thương hiệu<input name="detail_brand" maxlength="2000" data-product-detail-key="brand" /></label>
+            <label>Khối lượng<input name="detail_weight" maxlength="2000" data-product-detail-key="weight" /></label>
+            <label>Dung tích<input name="detail_volume" maxlength="2000" data-product-detail-key="volume" /></label>
+            <label>Hạn sử dụng<textarea name="detail_expiry" rows="2" maxlength="2000" data-product-detail-key="expiry"></textarea></label>
+            <label>Bảo quản<textarea name="detail_storage" rows="3" maxlength="2000" data-product-detail-key="storage"></textarea></label>
+            <label>Hướng dẫn sử dụng<textarea name="detail_usage" rows="3" maxlength="2000" data-product-detail-key="usage"></textarea></label>
+            <label>Quy cách đóng gói<textarea name="detail_packaging" rows="3" maxlength="2000" data-product-detail-key="packaging"></textarea></label>
+            <label class="admin-product-field-wide">Thông tin bổ sung<textarea name="detail_additional_info" rows="3" maxlength="2000" data-product-detail-key="additional_info"></textarea></label>
+            <label class="admin-product-field-wide">Thông số bổ sung (mỗi dòng: tên thông số: giá trị)
+              <textarea name="detail_specifications" rows="4" maxlength="12000" data-product-detail-specifications></textarea>
+            </label>
+          </fieldset>
+          <label class="admin-product-field-wide">Đường dẫn ảnh bìa
+            <input name="image" type="text" maxlength="2048" autocomplete="off" aria-describedby="product-cover-help" />
           </label>
-          <label class="admin-product-field-wide">Tải ảnh mới (JPG, PNG, WEBP hoặc GIF; tối đa 5 MB)
-            <input name="imageFile" type="file" accept="image/jpeg,image/png,image/webp,image/gif,.jpg,.jpeg,.png,.webp,.gif" data-product-image-file />
+          <div class="admin-product-cover-controls admin-product-field-wide">
+            <label>Chọn ảnh bìa mới (JPG, JPEG, PNG, WEBP hoặc GIF; tối đa 5 MB)
+              <input name="coverImageFile" type="file" accept="image/jpeg,image/png,image/webp,image/gif,.jpg,.jpeg,.png,.webp,.gif" data-product-cover-file />
+            </label>
+            <button class="admin-secondary-button" type="button" data-product-cover-cancel>Hủy thay đổi ảnh bìa</button>
+          </div>
+          <figure class="admin-product-cover-preview admin-product-field-wide" data-product-cover-preview>
+            <img alt="Ảnh bìa sản phẩm hiện tại" data-product-cover-image hidden />
+            <span data-product-cover-empty>Chưa có ảnh bìa</span>
+            <figcaption data-product-cover-caption>Ảnh chính hiện tại · ảnh tham khảo được lưu riêng và không ghi đè ảnh chính.</figcaption>
+          </figure>
+          <p class="admin-product-gallery-note admin-product-field-wide" id="product-cover-help">Ảnh tải lên được lưu trong kho ảnh cục bộ của Backend; đường dẫn ảnh bìa được lưu tại products.image.</p>
+          <label class="admin-product-field-wide">Thêm ảnh vào thư viện (JPG, PNG, WEBP hoặc GIF; tối đa 5 MB mỗi ảnh)
+            <input name="images" type="file" multiple accept="image/jpeg,image/png,image/webp,image/gif,.jpg,.jpeg,.png,.webp,.gif" data-product-gallery-files />
           </label>
-          <div class="admin-product-preview-wrap admin-product-field-wide">
-            <span>Xem trước</span>
-            <div class="admin-product-preview" data-product-image-preview><span data-product-image-empty>Ảnh chưa được thiết lập</span><img data-product-preview-image alt="Xem trước ảnh sản phẩm" hidden /></div>
+          <div class="admin-product-gallery-wrap admin-product-field-wide">
+            <div class="admin-product-preview-wrap">
+              <span>Xem trước ảnh mới</span>
+              <div class="admin-product-gallery-preview" data-product-gallery-preview><span data-product-gallery-empty>Chưa chọn ảnh mới</span></div>
+            </div>
+            <div class="admin-product-preview-wrap">
+              <span>Thư viện hiện tại</span>
+              <p class="admin-product-gallery-note" data-product-gallery-note role="status" aria-live="polite">Ảnh bìa cũ vẫn được giữ nguyên.</p>
+              <div class="admin-product-gallery-list" data-product-gallery-list></div>
+            </div>
           </div>
           <label class="admin-product-check"><input name="active" type="checkbox" checked /> Đang kinh doanh</label>
           <label class="admin-product-check"><input name="featured" type="checkbox" /> Sản phẩm nổi bật</label>

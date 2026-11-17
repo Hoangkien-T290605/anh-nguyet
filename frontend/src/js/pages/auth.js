@@ -143,22 +143,17 @@ export function mountAuth(mode) {
         );
         const duongDanQuayLai =
           new URLSearchParams(window.location.search).get("returnTo") || "";
-        const duongDanAnToan =
-          /^account\.html\?tab=(profile|addresses|orders)$/.test(
-            duongDanQuayLai,
-          ) ||
-          [
-            "checkout.html",
-            "favorites.html",
-            "products.html",
-            "admin-orders.html",
-            "admin-reviews.html",
-          ].includes(
-            duongDanQuayLai,
-          ) || /^product-detail\.html\?id=\d+$/.test(duongDanQuayLai);
-        window.location.assign(
-          duongDanAnToan ? duongDanQuayLai : "index.html",
-        );
+        const duongDanMuaSamAnToan =
+          /^account\.html\?tab=(profile|addresses|orders)$/.test(duongDanQuayLai) ||
+          ["checkout.html", "products.html", "cart.html", "favorites.html"].includes(duongDanQuayLai) ||
+          /^product-detail\.html\?id=\d+$/.test(duongDanQuayLai);
+        const duongDanAdminAnToan = ["admin-dashboard.html", "admin-products.html", "admin-categories.html", "admin-customers.html", "admin-orders.html", "admin-reviews.html", "admin-inventory.html", "admin-shipping.html", "admin-vouchers.html", "admin-admins.html", "admin-employees.html"].includes(duongDanQuayLai);
+        const duongDanNhanVienAnToan = ["employee-dashboard.html", "employee-orders.html", "employee-inventory.html", "employee-customers.html", "employee-reviews.html", "employee-vouchers.html", "employee-account.html"].includes(duongDanQuayLai);
+        let destination = "index.html";
+        if (ketQua.user.role === "admin") destination = duongDanMuaSamAnToan ? duongDanQuayLai : duongDanAdminAnToan ? duongDanQuayLai : "admin-dashboard.html";
+        else if (ketQua.user.role === "employee") destination = duongDanMuaSamAnToan ? duongDanQuayLai : duongDanNhanVienAnToan ? duongDanQuayLai : "employee-dashboard.html";
+        else if (duongDanMuaSamAnToan) destination = duongDanQuayLai;
+        window.location.assign(destination);
         return;
       }
 

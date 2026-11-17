@@ -1,0 +1,12 @@
+{
+  "test": {
+    "host": "localhost",
+    "port": 3306,
+    "serverUuid": "25d8548f-d207-11f1-87d5-025034f88cf3"
+  },
+  "production": {
+    "host": "localhost",
+    "port": 3306,
+    "serverUuid": "25d8548f-d207-11f1-87d5-025034f88cf3"
+  }
+}

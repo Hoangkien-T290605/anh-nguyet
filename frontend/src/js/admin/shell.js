@@ -11,7 +11,21 @@ const navigationItems = [
   { id: "orders", label: "Quản lý đơn hàng", icon: "▤", href: "admin-orders.html" },
   { id: "customers", label: "Quản lý khách hàng", icon: "♙", href: "admin-customers.html" },
   { id: "reviews", label: "Quản lý đánh giá", icon: "★", href: "admin-reviews.html" },
-  { id: "admin-users", label: "Tài khoản quản trị", icon: "♧", disabled: true },
+  { id: "inventory", label: "Quản lý tồn kho", icon: "▣", href: "admin-inventory.html" },
+  { id: "shipping", label: "Cấu hình vận chuyển", icon: "⇢", href: "admin-shipping.html" },
+  { id: "vouchers", label: "Quản lý Voucher", icon: "%", href: "admin-vouchers.html" },
+  { id: "admin-users", label: "Quản lý tài khoản Admin", icon: "♧", href: "admin-admins.html" },
+  { id: "employees", label: "Quản lý nhân viên", icon: "♟", href: "admin-employees.html" },
+];
+
+const employeeNavigationItems = [
+  { id: "employee-dashboard", label: "Tổng quan", icon: "⌂", href: "employee-dashboard.html" },
+  { id: "employee-orders", label: "Đơn hàng", icon: "▤", href: "employee-orders.html" },
+  { id: "employee-inventory", label: "Tồn kho", icon: "▣", href: "employee-inventory.html" },
+  { id: "employee-customers", label: "Tra cứu khách hàng", icon: "♙", href: "employee-customers.html" },
+  { id: "employee-reviews", label: "Kiểm duyệt đánh giá", icon: "★", href: "employee-reviews.html" },
+  { id: "employee-vouchers", label: "Tra cứu Voucher", icon: "%", href: "employee-vouchers.html" },
+  { id: "employee-account", label: "Tài khoản của tôi", icon: "♧", href: "employee-account.html" },
 ];
 
 function getInitials(name) {
@@ -33,36 +47,34 @@ export function applyAdminTheme() {
   }
 }
 
-export function mountAdminShell(user, activePage) {
+export function mountAdminShell(user, activePage, portal = "admin") {
   applyAdminTheme();
   const sidebar = document.getElementById("admin-sidebar");
   const topbar = document.getElementById("admin-topbar");
   const root = document.getElementById("admin-app");
   if (!sidebar || !topbar || !root) return;
 
-  const fullName = user.full_name || "Quản trị viên";
+  const isEmployeePortal = portal === "employee";
+  const fullName = user.full_name || (isEmployeePortal ? "Nhân viên" : "Quản trị viên");
+  const items = isEmployeePortal ? employeeNavigationItems : navigationItems;
   const avatarUrl = getAvatarUrl(user.avatar_url);
   const defaultAvatarUrl = "./assets/icon-account.png";
   const avatarMarkup = `<span class="admin-user-avatar"><img class="admin-user-avatar-image" src="${escapeHTML(avatarUrl || defaultAvatarUrl)}" alt="Ảnh đại diện ${escapeHTML(fullName)}" data-admin-avatar-image data-using-default="${avatarUrl ? "false" : "true"}" /><span class="admin-user-initials" aria-hidden="true" hidden>${escapeHTML(getInitials(fullName))}</span></span>`;
 
   sidebar.innerHTML = `
-    <a class="admin-brand" href="admin-dashboard.html">
+    <a class="admin-brand" href="${isEmployeePortal ? "employee-dashboard.html" : "admin-dashboard.html"}">
       <img src="./assets/logo-anh-nguyet.png" alt="Logo Ánh Nguyệt" />
-      <span>Ánh Nguyệt<small>ADMINISTRATION</small></span>
+      <span>Ánh Nguyệt<small>${isEmployeePortal ? "EMPLOYEE PORTAL" : "ADMINISTRATION"}</small></span>
     </a>
     <nav class="admin-nav" aria-label="Điều hướng quản trị">
-      ${navigationItems
-        .map((item) =>
-          item.disabled
-            ? `<span class="admin-nav-disabled" aria-disabled="true"><span class="admin-nav-icon" aria-hidden="true">${item.icon}</span><span>${item.label}</span><small>Chưa triển khai</small></span>`
-            : `<a class="admin-nav-link" href="${item.href}" ${activePage === item.id ? 'aria-current="page"' : ""}><span class="admin-nav-icon" aria-hidden="true">${item.icon}</span><span>${item.label}</span></a>`,
-        )
+      ${items
+        .map((item) => `<a class="admin-nav-link" href="${item.href}" ${activePage === item.id ? 'aria-current="page"' : ""}><span class="admin-nav-icon" aria-hidden="true">${item.icon}</span><span>${item.label}</span></a>`)
         .join("")}
     </nav>
     <div class="admin-sidebar-bottom">
       <div class="admin-sidebar-account" aria-label="Tài khoản ${escapeHTML(fullName)}">
         ${avatarMarkup}
-        <span class="admin-sidebar-account-info"><strong>${escapeHTML(fullName)}</strong><span>${escapeHTML(user.email || "")}</span></span>
+        <span class="admin-sidebar-account-info"><strong>${escapeHTML(fullName)}</strong><span>${isEmployeePortal ? "Nhân viên" : "Quản trị viên"} · ${escapeHTML(user.email || "")}</span></span>
       </div>
       <button class="admin-signout" type="button" data-admin-logout><span class="admin-nav-icon" aria-hidden="true">↪</span>Đăng xuất</button>
       <a class="admin-store-link" href="index.html">← Mở cửa hàng</a>
@@ -75,6 +87,18 @@ export function mountAdminShell(user, activePage) {
     orders: "Quản lý đơn hàng",
     customers: "Quản lý khách hàng",
     reviews: "Quản lý đánh giá",
+    inventory: "Quản lý tồn kho",
+    shipping: "Cấu hình vận chuyển",
+    vouchers: "Quản lý Voucher",
+    "admin-users": "Tài khoản quản trị",
+    employees: "Quản lý nhân viên",
+    "employee-dashboard": "Tổng quan nhân viên",
+    "employee-orders": "Đơn hàng",
+    "employee-inventory": "Tồn kho",
+    "employee-customers": "Tra cứu khách hàng",
+    "employee-reviews": "Kiểm duyệt đánh giá",
+    "employee-vouchers": "Tra cứu Voucher",
+    "employee-account": "Tài khoản của tôi",
   };
   const pageTitle = pageTitles[activePage] || "Khu vực quản trị";
   topbar.innerHTML = `
@@ -118,7 +142,7 @@ export function mountAdminShell(user, activePage) {
           detail: { user: null },
         }),
       );
-      window.location.assign("admin-login.html");
+      window.location.assign(isEmployeePortal ? "employee-login.html" : "admin-login.html");
       return;
     }
     const toggle = event.target.closest("[data-admin-menu-toggle]");

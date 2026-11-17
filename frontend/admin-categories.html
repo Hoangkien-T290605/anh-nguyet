@@ -25,12 +25,12 @@
               <label class="admin-category-search">Tìm danh mục
                 <input type="search" data-category-search placeholder="Nhập tên danh mục" autocomplete="off" />
               </label>
-              <p class="admin-category-note">Chưa có API riêng để thêm, đổi tên hoặc xóa danh mục. Dữ liệu bên dưới được tổng hợp từ danh sách sản phẩm.</p>
+              <button class="admin-primary-button" type="button" data-category-add>+ Thêm danh mục</button>
             </div>
             <p class="admin-products-message" data-category-message role="status" aria-live="polite">Đang tải danh mục...</p>
             <div class="admin-products-table-wrap" data-category-table-wrap hidden>
               <table class="admin-products-table admin-categories-table">
-                <thead><tr><th>Danh mục</th><th>Tổng sản phẩm</th><th>Đang kinh doanh</th></tr></thead>
+                <thead><tr><th>Danh mục</th><th>Mô tả</th><th>Tổng sản phẩm</th><th>Đang kinh doanh</th><th>Thao tác</th></tr></thead>
                 <tbody data-category-rows></tbody>
               </table>
             </div>
@@ -38,6 +38,7 @@
         </main>
       </div>
     </div>
+    <dialog class="admin-operation-dialog" data-category-dialog aria-labelledby="category-dialog-title"><form data-category-form><header><h2 id="category-dialog-title" data-category-dialog-title>Thêm danh mục</h2><button type="button" data-category-close aria-label="Đóng">×</button></header><input type="hidden" name="id" /><label>Tên danh mục<input name="name" maxlength="100" required /></label><label>Mô tả<textarea name="description" maxlength="500" rows="3"></textarea></label><p data-category-form-message role="alert" hidden></p><footer><button type="button" data-category-close>Hủy</button><button class="admin-primary-button" type="submit" data-category-save>Lưu danh mục</button></footer></form></dialog>
     <script src="./config.js"></script>
     <script type="module" src="./src/js/admin/main.js"></script>
   </body>

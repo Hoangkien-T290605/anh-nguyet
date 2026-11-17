@@ -4,6 +4,8 @@ import { escapeHTML } from "../components/product-card.js";
 
 const AUTH_KEY = "anh-nguyet-auth";
 const PAGE_SIZE = 10;
+const employeePortal = window.location.pathname.split("/").pop().startsWith("employee-");
+function redirectToPortalLogin(expired = false) { const file = window.location.pathname.split("/").pop(); window.location.replace((employeePortal ? "employee-login" : "admin-login") + ".html?" + (expired ? "session=expired&" : "") + "returnTo=" + encodeURIComponent(file)); }
 
 function readSession() {
   try {
@@ -62,7 +64,7 @@ export async function mountAdminReviews() {
   const session = readSession();
 
   if (!session?.token) {
-    window.location.replace("admin-login.html?returnTo=admin-reviews.html");
+    redirectToPortalLogin();
     return;
   }
 
@@ -169,7 +171,7 @@ export async function mountAdminReviews() {
         <p class="admin-review-comment">${escapeHTML(review.comment || "(Không có nhận xét)")}</p>
         ${renderImageStrip(review)}
         <p class="admin-review-created">${escapeHTML(formatDate(review.created_at))}</p>
-        <div class="admin-review-actions"><button class="admin-customer-view" type="button" data-review-detail="${escapeHTML(id)}">Xem chi tiết</button><button class="admin-review-action" type="button" data-review-visibility="${visible ? "hide" : "show"}" data-review-id="${escapeHTML(id)}" ${pending.has(id) ? "disabled" : ""}>${pending.has(id) ? "Đang xử lý..." : visible ? "Ẩn đánh giá" : "Hiện đánh giá"}</button><button class="admin-review-action is-danger" type="button" data-review-delete="${escapeHTML(id)}" ${pending.has(id) ? "disabled" : ""}>Xóa đánh giá</button></div>
+        <div class="admin-review-actions"><button class="admin-customer-view" type="button" data-review-detail="${escapeHTML(id)}">Xem chi tiết</button><button class="admin-review-action" type="button" data-review-visibility="${visible ? "hide" : "show"}" data-review-id="${escapeHTML(id)}" ${pending.has(id) ? "disabled" : ""}>${pending.has(id) ? "Đang xử lý..." : visible ? "Ẩn đánh giá" : "Hiện đánh giá"}</button>${employeePortal ? "" : `<button class="admin-review-action is-danger" type="button" data-review-delete="${escapeHTML(id)}" ${pending.has(id) ? "disabled" : ""}>Xóa đánh giá</button>`}</div>
       </article>`;
     }).join("")}</div>`;
     bindImageFallbacks();
@@ -192,7 +194,7 @@ export async function mountAdminReviews() {
       currentPage = 1;
     } catch (error) {
       if (error.status === 401) {
-        window.location.replace("admin-login.html?session=expired&returnTo=admin-reviews.html");
+        redirectToPortalLogin(true);
         return;
       }
       loadError = error.message || "Không thể tải đánh giá.";
@@ -255,7 +257,7 @@ export async function mountAdminReviews() {
       noticeError = false;
     } catch (error) {
       if (error.status === 401) {
-        window.location.replace("admin-login.html?session=expired&returnTo=admin-reviews.html");
+        redirectToPortalLogin(true);
         return;
       }
       notice = error.message || "Không thể xử lý đánh giá.";

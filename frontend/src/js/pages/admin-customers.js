@@ -3,6 +3,8 @@ import { escapeHTML } from "../components/product-card.js";
 
 const AUTH_KEY = "anh-nguyet-auth";
 const PAGE_LIMIT = 20;
+const employeePortal = window.location.pathname.split("/").pop().startsWith("employee-");
+function redirectToPortalLogin(expired = false) { const file = window.location.pathname.split("/").pop(); window.location.replace((employeePortal ? "employee-login" : "admin-login") + ".html?" + (expired ? "session=expired&" : "") + "returnTo=" + encodeURIComponent(file)); }
 
 function readSession() {
   try {
@@ -40,7 +42,7 @@ export async function mountAdminCustomers() {
   const session = readSession();
 
   if (!session?.token) {
-    window.location.replace("admin-login.html?returnTo=admin-customers.html");
+    redirectToPortalLogin();
     return;
   }
 
@@ -134,7 +136,7 @@ export async function mountAdminCustomers() {
     } catch (error) {
       if (requestId !== listRequestId || error.name === "AbortError") return;
       if (error.status === 401) {
-        window.location.replace("admin-login.html?session=expired&returnTo=admin-customers.html");
+        redirectToPortalLogin(true);
         return;
       }
       loadError = error.message || "Không thể tải danh sách khách hàng.";
@@ -153,6 +155,8 @@ export async function mountAdminCustomers() {
     const avatar = getAvatarUrl(customer.avatar_url);
     const initials = getInitials(customer.full_name);
     const addresses = Array.isArray(customer.addresses) ? customer.addresses : [];
+    const orders = Array.isArray(customer.orders) ? customer.orders : [];
+    const orderSummary = customer.order_summary || {};
     detailContent.innerHTML = `<section class="admin-customer-profile">
       <span class="admin-customer-avatar admin-customer-avatar-large"><span data-detail-initials ${avatar ? "hidden" : ""}>${escapeHTML(initials)}</span>${avatar ? `<img src="${escapeHTML(avatar)}" alt="Ảnh đại diện ${escapeHTML(customer.full_name || "khách hàng")}" data-detail-avatar />` : ""}</span>
       <dl class="admin-customer-fields">
@@ -163,7 +167,8 @@ export async function mountAdminCustomers() {
         <div><dt>Ngày đăng ký</dt><dd>${escapeHTML(formatDate(customer.created_at))}</dd></div>
       </dl>
     </section>
-    <section class="admin-customer-addresses"><h3>Địa chỉ giao hàng</h3>${addresses.length ? `<div class="admin-customer-address-list">${addresses.map((address) => `<article class="admin-customer-address"><div><strong>${escapeHTML(address.recipient_name || "Người nhận")}</strong>${address.is_default ? '<span class="admin-customer-default">Mặc định</span>' : ""}</div><p>${escapeHTML(address.phone || "—")}</p><p>${escapeHTML(address.address || "—")}</p></article>`).join("")}</div>` : '<p class="admin-customer-no-address">Khách hàng chưa lưu địa chỉ giao hàng.</p>'}</section>`;
+    <section class="admin-customer-addresses"><h3>Địa chỉ giao hàng</h3>${addresses.length ? `<div class="admin-customer-address-list">${addresses.map((address) => `<article class="admin-customer-address"><div><strong>${escapeHTML(address.recipient_name || "Người nhận")}</strong>${address.is_default ? '<span class="admin-customer-default">Mặc định</span>' : ""}</div><p>${escapeHTML(address.phone || "—")}</p><p>${escapeHTML(address.address || "—")}</p></article>`).join("")}</div>` : '<p class="admin-customer-no-address">Khách hàng chưa lưu địa chỉ giao hàng.</p>'}</section>
+    <section class="admin-customer-addresses"><h3>Lịch sử mua hàng</h3><p>${Number(orderSummary.order_count || 0)} đơn · ${Number(orderSummary.completed_order_count || 0)} đơn hoàn thành · Tổng giá trị hoàn thành ${new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 }).format(Number(orderSummary.completed_order_value) || 0)}</p>${orders.length ? `<div class="admin-products-table-wrap"><table class="admin-products-table"><thead><tr><th>Mã đơn</th><th>Ngày</th><th>Trạng thái</th><th>Tổng tiền</th></tr></thead><tbody>${orders.map((order) => `<tr><td><a href="admin-orders.html">#${escapeHTML(order.id)}</a></td><td>${escapeHTML(formatDate(order.created_at))}</td><td>${escapeHTML(order.status || "—")}</td><td>${new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 }).format(Number(order.total_amount) || 0)}</td></tr>`).join("")}</tbody></table></div>` : "<p>Khách hàng chưa có đơn hàng.</p>"}</section>`;
 
     detailContent.querySelector("[data-detail-avatar]")?.addEventListener("error", (event) => {
       event.currentTarget.hidden = true;
@@ -191,7 +196,7 @@ export async function mountAdminCustomers() {
     } catch (error) {
       if (requestId !== detailRequestId) return;
       if (error.status === 401) {
-        window.location.replace("admin-login.html?session=expired&returnTo=admin-customers.html");
+        redirectToPortalLogin(true);
         return;
       }
       detailContent.innerHTML = `<div class="admin-customer-detail-error" role="alert"><p>${escapeHTML(error.message || "Không thể tải chi tiết khách hàng.")}</p><button type="button" data-retry-customer="${escapeHTML(id)}">Thử lại</button></div>`;

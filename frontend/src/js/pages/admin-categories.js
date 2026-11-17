@@ -2,97 +2,73 @@ import { apiRequest } from "../services/api.js";
 import { escapeHTML } from "../components/product-card.js";
 
 const AUTH_KEY = "anh-nguyet-auth";
-
-function normalizeText(value = "") {
-  return String(value)
-    .toLocaleLowerCase("vi")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/đ/g, "d")
-    .trim();
-}
-
-function readSession() {
-  try {
-    return JSON.parse(localStorage.getItem(AUTH_KEY) || "null");
-  } catch {
-    return null;
-  }
-}
+function readToken() { try { return JSON.parse(localStorage.getItem(AUTH_KEY) || "null")?.token || ""; } catch { return ""; } }
 
 export async function mountAdminCategories() {
+  const token = readToken();
   const search = document.querySelector("[data-category-search]");
   const message = document.querySelector("[data-category-message]");
-  const tableWrap = document.querySelector("[data-category-table-wrap]");
+  const table = document.querySelector("[data-category-table-wrap]");
   const rows = document.querySelector("[data-category-rows]");
-  const session = readSession();
-
-  if (!session?.token) {
-    window.location.replace("admin-login.html?returnTo=admin-categories.html");
-    return;
-  }
-
+  const dialog = document.querySelector("[data-category-dialog]");
+  const form = document.querySelector("[data-category-form]");
+  const formMessage = document.querySelector("[data-category-form-message]");
+  const headers = { Authorization: `Bearer ${token}` };
   let categories = [];
-  let loading = true;
-  let loadError = "";
+  let loading = false;
+  let saving = false;
+  let managementEnabled = false;
+  let debounce;
 
-  function showMessage(text, isError = false) {
-    message.textContent = text;
-    message.hidden = !text;
-    message.setAttribute("role", isError ? "alert" : "status");
-    message.classList.toggle("is-error", isError);
-  }
-
+  function show(text, error = false) { message.textContent = text; message.hidden = !text; message.classList.toggle("is-error", error); message.setAttribute("role", error ? "alert" : "status"); }
   function render() {
-    const query = normalizeText(search.value);
-    const visible = categories.filter((category) => normalizeText(category.name).includes(query));
-    tableWrap.hidden = loading || visible.length === 0;
-
-    rows.innerHTML = visible.map((category) => `
-      <tr>
-        <td><strong class="admin-category-name">${escapeHTML(category.name)}</strong></td>
-        <td>${category.productCount}</td>
-        <td>${category.activeCount}</td>
-      </tr>`).join("");
-
+    table.hidden = categories.length === 0;
+    rows.innerHTML = categories.map((item) => `<tr><td><strong class="admin-category-name">${escapeHTML(item.name)}</strong></td><td>${escapeHTML(item.description || "—")}</td><td>${Number(item.product_count || 0).toLocaleString("vi-VN")}</td><td>${Number(item.active_product_count || 0).toLocaleString("vi-VN")}</td><td><div class="admin-row-actions"><button type="button" class="admin-customer-view" data-category-edit="${escapeHTML(item.id)}" ${!managementEnabled ? "disabled" : ""}>Sửa</button><button type="button" class="admin-review-action" data-category-delete="${escapeHTML(item.id)}" ${!managementEnabled || Number(item.product_count) ? "disabled" : ""} title="Danh mục phải không còn sản phẩm trước khi xóa">Xóa</button></div></td></tr>`).join("");
+  }
+  async function load() {
     if (loading) return;
-    if (loadError) {
-      showMessage(loadError, true);
-    } else if (!categories.length) {
-      showMessage("Chưa có danh mục nào trong dữ liệu sản phẩm.");
-    } else if (!visible.length) {
-      showMessage("Không tìm thấy danh mục phù hợp.");
-    } else {
-      showMessage(`Đang hiển thị ${visible.length} / ${categories.length} danh mục.`);
-    }
+    loading = true; show("Đang tải danh mục...");
+    try {
+      const query = new URLSearchParams({ page: "1", limit: "100", q: search.value.trim() });
+      const result = await apiRequest(`/admin/categories?${query}`, { headers });
+      categories = Array.isArray(result.data) ? result.data : [];
+      managementEnabled = result.management_enabled === true;
+      document.querySelector("[data-category-add]").hidden = !managementEnabled;
+      render();
+      show(!managementEnabled ? "Danh sách được tổng hợp từ sản phẩm. Cần áp dụng migration danh mục trước khi thêm, sửa hoặc xóa." : categories.length ? `Đang hiển thị ${categories.length} / ${Number(result.pagination?.total || categories.length)} danh mục.` : "Không có danh mục phù hợp.");
+    } catch (error) {
+      categories = []; render(); show(error.message || "Không thể tải danh mục.", true);
+      if (error.status === 401) window.location.replace("admin-login.html?session=expired&returnTo=admin-categories.html");
+    } finally { loading = false; }
   }
-
-  search.addEventListener("input", render);
-
-  try {
-    const result = await apiRequest("/products", {
-      headers: { Authorization: `Bearer ${session.token}` },
-    });
-    if (!Array.isArray(result.data)) {
-      throw new Error("Máy chủ trả về danh sách sản phẩm không hợp lệ.");
-    }
-
-    const grouped = new Map();
-    for (const product of result.data) {
-      if (!product || typeof product !== "object") continue;
-      const name = typeof product.category === "string" ? product.category.trim() : "";
-      if (!name) continue;
-      const group = grouped.get(name) || { name, productCount: 0, activeCount: 0 };
-      group.productCount += 1;
-      if (product.active !== false && product.active !== 0) group.activeCount += 1;
-      grouped.set(name, group);
-    }
-
-    categories = [...grouped.values()].sort((a, b) => a.name.localeCompare(b.name, "vi"));
-  } catch (error) {
-    loadError = error.message || "Không thể tải danh mục từ máy chủ.";
-  } finally {
-    loading = false;
-    render();
+  function openForm(category = null) {
+    form.reset(); form.elements.id.value = category?.id || ""; form.elements.name.value = category?.name || ""; form.elements.description.value = category?.description || "";
+    document.querySelector("[data-category-dialog-title]").textContent = category ? "Chỉnh sửa danh mục" : "Thêm danh mục";
+    formMessage.hidden = true; formMessage.textContent = ""; dialog.showModal();
   }
+  document.querySelector("[data-category-add]").addEventListener("click", () => openForm());
+  document.querySelectorAll("[data-category-close]").forEach((button) => button.addEventListener("click", () => dialog.close()));
+  search.addEventListener("input", () => { clearTimeout(debounce); debounce = setTimeout(() => void load(), 250); });
+  rows.addEventListener("click", async (event) => {
+    const edit = event.target.closest("[data-category-edit]");
+    if (edit) { const item = categories.find((category) => String(category.id) === edit.dataset.categoryEdit); if (item) openForm(item); return; }
+    const remove = event.target.closest("[data-category-delete]");
+    if (!remove || loading) return;
+    const item = categories.find((category) => String(category.id) === remove.dataset.categoryDelete);
+    if (!item || !window.confirm(`Xóa danh mục “${item.name}”? Backend sẽ từ chối nếu còn sản phẩm thuộc danh mục này.`)) return;
+    loading = true;
+    try { const result = await apiRequest(`/admin/categories/${encodeURIComponent(item.id)}`, { method: "DELETE", headers }); loading = false; show(result.message || "Đã xóa danh mục."); await load(); }
+    catch (error) { show(error.message || "Không thể xóa danh mục.", true); }
+    finally { loading = false; }
+  });
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault(); if (saving || !form.reportValidity()) return;
+    const id = form.elements.id.value;
+    const body = { name: form.elements.name.value.trim(), description: form.elements.description.value.trim() };
+    saving = true; form.querySelector("[data-category-save]").disabled = true;
+    try { const result = await apiRequest(id ? `/admin/categories/${encodeURIComponent(id)}` : "/admin/categories", { method: id ? "PUT" : "POST", headers, body: JSON.stringify(body) }); dialog.close(); show(result.message || "Đã lưu danh mục."); await load(); }
+    catch (error) { formMessage.textContent = error.message || "Không thể lưu danh mục."; formMessage.hidden = false; }
+    finally { saving = false; form.querySelector("[data-category-save]").disabled = false; }
+  });
+  await load();
 }

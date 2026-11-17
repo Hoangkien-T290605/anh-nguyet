@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="theme-color" content="#7041a6" />
+    <link rel="stylesheet" href="./site.css" /><link rel="stylesheet" href="./admin.css" />
+    <title>Tra cứu Voucher | Ánh Nguyệt</title>
+  </head>
+  <body data-admin-page="employee-vouchers">
+    <div id="admin-gate" class="admin-gate" role="status">Đang xác minh quyền Nhân viên...</div>
+    <div id="admin-app" class="admin-app" hidden><aside id="admin-sidebar" class="admin-sidebar"></aside><div class="admin-main-column"><header id="admin-topbar" class="admin-topbar"></header>
+      <main id="admin-content" class="admin-content admin-operations-page"><section class="admin-page-heading"><span>TRA CỨU KHUYẾN MÃI</span><h1>Voucher</h1><p>Chỉ xem điều kiện và trạng thái sử dụng; Nhân viên không thể tạo hoặc thay đổi mã.</p></section>
+        <section class="admin-products-panel"><div class="admin-operations-toolbar"><label>Tìm kiếm<input type="search" data-employee-voucher-search placeholder="Mã hoặc tên chương trình" /></label><label>Trạng thái<select data-employee-voucher-status><option value="all">Tất cả</option><option value="active">Đang hoạt động</option><option value="scheduled">Chưa bắt đầu</option><option value="expired">Đã hết hạn</option><option value="exhausted">Hết lượt</option><option value="inactive">Tạm ngừng</option></select></label></div>
+          <p class="admin-products-message" data-employee-voucher-message role="status" aria-live="polite">Đang tải Voucher...</p><div class="admin-products-table-wrap" data-employee-voucher-wrap hidden><table class="admin-products-table"><thead><tr><th>Mã</th><th>Chương trình</th><th>Điều kiện</th><th>Lượt dùng</th><th>Thời hạn</th><th>Trạng thái</th></tr></thead><tbody data-employee-voucher-rows></tbody></table></div></section>
+      </main></div></div>
+    <script src="./config.js"></script><script type="module" src="./src/js/admin/main.js"></script>
+  </body>
+</html>
